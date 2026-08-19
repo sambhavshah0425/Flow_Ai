@@ -1,0 +1,23 @@
+import { TextNode } from './TextNode';
+import { PDFNode } from './PDFNode';
+import { GeminiNode } from './GeminiNode';
+import { APINode } from './APINode';
+import { DelayNode } from './DelayNode';
+import { DownloadNode } from './DownloadNode';
+import { ConditionNode } from './ConditionNode';
+import { EmbedNode } from './EmbedNode';
+import { RetrieveNode } from './RetrieveNode';
+import { EmailNode } from './EmailNode';
+
+export const nodeTypes = {
+  text: TextNode,
+  pdf: PDFNode,
+  gemini: GeminiNode,
+  api: APINode,
+  delay: DelayNode,
+  download: DownloadNode,
+  condition: ConditionNode,
+  embed: EmbedNode,
+  retrieve: RetrieveNode,
+  email: EmailNode
+};

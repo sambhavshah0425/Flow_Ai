@@ -1,0 +1,146 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { Canvas } from '@react-three/fiber';
+import { useSceneStore } from '../scene/store/useSceneStore';
+import { WorkflowGraphScene } from '../scene/graph/WorkflowGraphScene';
+import { DemoCameraRig } from '../scene/graph/DemoCameraRig';
+import { WALKTHROUGH_START_POSE } from '../scene/graph/demoCameraPath';
+import NodeNetwork from './NodeNetwork';
+import { ChevronDown } from 'lucide-react';
+
+const COPY = {
+  eyebrow: 'Live demo',
+  title: 'Chain AI models into pipelines. Visually.',
+  lede: 'Scroll to travel through the pipeline as it builds, node by node.'
+};
+
+const STEPS = [
+  { label: 'Input', end: 0.15 },
+  { label: 'PDF', end: 0.3 },
+  { label: 'Gemini AI', end: 0.45 },
+  { label: 'REST API', end: 0.525 },
+  { label: 'Delay Timer', end: 0.6 },
+  { label: 'Output', end: 0.75 },
+];
+
+function getCurrentStepIndex(progress) {
+  if (progress >= 0.75) return STEPS.length - 1;
+  for (let i = 0; i < STEPS.length; i++) {
+    if (progress < STEPS[i].end) return i;
+  }
+  return STEPS.length - 1;
+}
+
+export default function LiveDemoSection() {
+  const wrapperRef = useRef(null);
+  const qualityTier = useSceneStore((state) => state.qualityTier);
+  const reducedMotion = useSceneStore((state) => state.reducedMotion);
+  const webglSupported = useSceneStore((state) => state.webglSupported);
+  const [targetProgress, setTargetProgress] = useState(reducedMotion ? 1.0 : 0);
+  const [easedProgress, setEasedProgress] = useState(reducedMotion ? 1.0 : 0);
+
+  useEffect(() => {
+    if (reducedMotion) {
+      setTargetProgress(1.0);
+      setEasedProgress(1.0);
+      return;
+    }
+    const onScroll = () => {
+      if (!wrapperRef.current) return;
+      const rect = wrapperRef.current.getBoundingClientRect();
+      const total = rect.height - window.innerHeight;
+      if (total <= 0) return;
+      const computedProgress = Math.min(1, Math.max(0, -rect.top / total));
+      setTargetProgress(computedProgress);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [reducedMotion]);
+
+  // Smoothly interpolate progress over animation frames
+  useEffect(() => {
+    if (reducedMotion) return;
+    let rafId;
+    const ease = () => {
+      setEasedProgress((prev) => {
+        const diff = targetProgress - prev;
+        if (Math.abs(diff) < 0.0005) return targetProgress;
+        return prev + diff * 0.12; // 0.12 coefficient provides smooth momentum
+      });
+      rafId = requestAnimationFrame(ease);
+    };
+    ease();
+    return () => cancelAnimationFrame(rafId);
+  }, [targetProgress, reducedMotion]);
+
+  const progress = reducedMotion ? 1.0 : easedProgress;
+  const dpr = qualityTier === 'high' ? [1, 2] : 1;
+  const execBoost = progress > 0.75 ? 1 + ((progress - 0.75) / 0.25) * 2.2 : 1.0;
+  const currentStep = getCurrentStepIndex(progress);
+
+  return (
+    <section ref={wrapperRef} id="interactive-demo" className="relative h-[270vh] bg-dark-900 border-b border-white/[0.04]">
+      <div className="sticky top-0 h-screen w-full flex flex-col justify-between overflow-hidden py-16">
+        {/* Header Overlay */}
+        <div className="relative z-10 max-w-3xl mx-auto px-4 text-center pointer-events-none">
+          <span className="text-xs font-bold uppercase tracking-widest text-brand-400 bg-brand-500/10 px-3 py-1 rounded-full border border-brand-500/20">
+            {COPY.eyebrow}
+          </span>
+          <h2 className="mt-4 text-2xl sm:text-4xl font-bold text-white tracking-tight">
+            {COPY.title}
+          </h2>
+          <p className="mt-2 text-slate-400 text-sm max-w-xl mx-auto">
+            {COPY.lede}
+          </p>
+        </div>
+
+        {/* Bounded visual area */}
+        <div className="absolute inset-x-0 bottom-0 top-[220px] z-0 pointer-events-none flex items-center justify-center">
+          {webglSupported ? (
+            <Canvas
+              dpr={dpr}
+              camera={{ position: WALKTHROUGH_START_POSE.position, fov: 42, near: 0.1, far: 20 }}
+              gl={{ antialias: false, alpha: true }}
+            >
+              <fog attach="fog" args={['#010204', 4, 14]} />
+              <ambientLight intensity={0.45} />
+              <directionalLight position={[2, 8, 4]} intensity={0.9} />
+              <pointLight position={[-4, 3, 2]} intensity={0.7} color="#a78bfa" />
+              <pointLight position={[4, -3, 2]} intensity={0.7} color="#60a5fa" />
+
+              <WorkflowGraphScene progress={progress} reducedMotion={reducedMotion} execBoost={execBoost} />
+              <DemoCameraRig progress={progress} reducedMotion={reducedMotion} />
+            </Canvas>
+          ) : (
+            <div className="w-[800px] h-[400px] max-w-full opacity-60">
+              <NodeNetwork />
+            </div>
+          )}
+        </div>
+
+        {/* Scroll invitation helper, replaced by the step indicator once scrolling starts */}
+        {progress < 0.05 && !reducedMotion ? (
+          <div className="relative z-10 flex flex-col items-center gap-1.5 text-xs font-mono text-slate-500 animate-bounce pointer-events-none pb-6">
+            <span>Scroll to build pipeline</span>
+            <ChevronDown className="w-4 h-4" />
+          </div>
+        ) : (
+          <div className="relative z-10 flex items-center justify-center gap-1.5 sm:gap-2.5 px-4 pb-6 flex-wrap pointer-events-none">
+            {STEPS.map((step, i) => (
+              <span key={step.label} className="flex items-center gap-1.5 sm:gap-2.5">
+                <span
+                  className={`text-[10px] sm:text-[11px] font-mono tracking-wide transition-colors duration-300 ${
+                    i === currentStep ? 'text-sky-300 font-semibold' : i < currentStep ? 'text-slate-400' : 'text-slate-600'
+                  }`}
+                >
+                  {String(i + 1).padStart(2, '0')} {step.label}
+                </span>
+                {i < STEPS.length - 1 && <span className="text-slate-700 text-[10px]">→</span>}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}

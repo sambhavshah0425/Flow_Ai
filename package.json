@@ -1,0 +1,22 @@
+{
+  "name": "flowforge-os",
+  "version": "1.0.0",
+  "description": "Agentic Workflow Orchestrator built using MERN Stack",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev:backend": "nodemon backend/server.js",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:frontend": "cd frontend && npm run build"
+  },
+  "keywords": [
+    "workflow",
+    "orchestrator",
+    "ai",
+    "mern",
+    "dag",
+    "reactflow"
+  ],
+  "author": "FlowForge Team",
+  "license": "MIT"
+}
