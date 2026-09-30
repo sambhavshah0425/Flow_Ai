@@ -177,7 +177,7 @@ export function WorkflowBuilderPage() {
       </div>
 
       {/* Bottom Execution Console Drawer */}
-      <ExecutionConsole nodes={nodes} />
+      <ExecutionConsole nodes={nodes} edges={edges} />
 
       {/* AI Copilot Prompt Modal */}
       <AICopilotModal
