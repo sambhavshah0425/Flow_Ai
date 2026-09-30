@@ -1,10 +1,8 @@
 import { io } from 'socket.io-client';
 
-const URL = window.location.origin.includes('5173')
-  ? 'http://localhost:5000'
-  : window.location.origin;
-
-export const socket = io(URL, {
+// Same origin as the page: in development Vite proxies /socket.io to the
+// backend (see vite.config.js), so this works whichever port Vite picks.
+export const socket = io(window.location.origin, {
   autoConnect: false,
   reconnection: true
 });
