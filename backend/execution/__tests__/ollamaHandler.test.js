@@ -46,3 +46,16 @@ describe('ollamaHandler', () => {
     await expect(ollamaHandler({ id: 'o', data: { prompt: '  ' } }, ctx())).rejects.toThrow(/prompt is empty/);
   });
 });
+
+describe('legacy gemini nodes', () => {
+  it('ignore their Gemini model name and run on the default Qwen model', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ model: 'qwen3:1.7b', message: { content: 'ok' } })
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await ollamaHandler({ id: 'gemini_1', data: { prompt: 'hi', model: 'gemini-flash-latest' } }, ctx());
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).model).toBe('qwen3:1.7b');
+  });
+});

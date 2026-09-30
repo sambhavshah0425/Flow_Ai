@@ -4,7 +4,8 @@ import { Bot } from 'lucide-react';
 
 export function OllamaNode(props) {
   const prompt = props.data?.prompt || 'Ask the local AI...';
-  const model = props.data?.model || 'qwen3:1.7b';
+  const saved = props.data?.model;
+  const model = saved && !/^gemini/i.test(saved) ? saved : 'qwen3:1.7b';
 
   return (
     <BaseNode id={props.id} data={props.data} icon={Bot} title="Local AI (Qwen)" colorClass="bg-teal-500/20 text-teal-400">

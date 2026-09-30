@@ -15,6 +15,14 @@ ollama pull qwen3:1.7b
 ollama run qwen3:1.7b "Say hi"
 ```
 
+Qwen is the app's only AI: the Local AI node, **Chat with Qwen**, the one-prompt **AI Copilot** generator and the Embed & Retrieve nodes all run through Ollama. Gemini has been removed. Workflows saved with old `gemini` nodes still load and run, on Qwen.
+
+For better document search (Embed & Retrieve), also pull the embedding model (~640 MB). Without it, those nodes fall back to a free offline keyword embedding:
+
+```bash
+ollama pull qwen3-embedding:0.6b
+```
+
 Ollama runs in the background on `http://localhost:11434`. Restart the backend (`npm run dev:backend`), open **Workflow Studio**, and click **Chat with Qwen**. The badge turns green when it's ready.
 
 **Optional settings** in `backend/.env` (these are the defaults):
@@ -22,6 +30,7 @@ Ollama runs in the background on `http://localhost:11434`. Restart the backend (
 ```env
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=qwen3:1.7b
+OLLAMA_EMBED_MODEL=qwen3-embedding:0.6b
 ```
 
 `qwen3:1.7b` suits an 8 GB laptop with no GPU. `qwen3:4b` gives better answers but is slower. Pull it first, then set `OLLAMA_MODEL=qwen3:4b`.
@@ -83,4 +92,4 @@ The untouched starter canvas is not sent to the model. Otherwise Qwen tries to "
 
 ## 5. Deployment note
 
-Ollama must run on the same machine or network as the backend. Free hosts such as Render or Vercel can't run it. For a hosted demo, rent a VM with 8 GB+ RAM, or keep Gemini as the cloud AI there. Never expose port 11434 publicly: Ollama has no authentication.
+Ollama must run on the same machine or network as the backend. Free hosts such as Render or Vercel can't run it. For a hosted demo, rent a VM with 8 GB+ RAM, and point `OLLAMA_BASE_URL` at it. Never expose port 11434 publicly: Ollama has no authentication.

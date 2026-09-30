@@ -174,54 +174,12 @@ export function NodeInspector() {
           </div>
         )}
 
-        {type === 'gemini' && (
-          <div className="space-y-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1">Model Selection</label>
-              <select
-                value={data.model || 'gemini-flash-latest'}
-                onChange={(e) => handleChange('model', e.target.value)}
-                className="w-full bg-dark-900 border border-dark-600 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
-              >
-                <option value="gemini-flash-latest">gemini-flash-latest (Recommended)</option>
-                <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Fast)</option>
-                <option value="gemini-3.5-flash">gemini-3.5-flash (Balanced)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center justify-between">
-                <span>AI Prompt Template</span>
-                <span className="text-[10px] text-purple-400 font-mono">&#123;&#123;node.output&#125;&#125;</span>
-              </label>
-              <textarea
-                rows={4}
-                value={data.prompt || ''}
-                onChange={(e) => handleChange('prompt', e.target.value)}
-                className="w-full bg-dark-900 border border-dark-600 rounded-lg p-2.5 text-xs text-white font-mono focus:border-purple-500"
-                placeholder="Summarize {{text_1.text}} into bullet points"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1">Temperature ({data.temperature || 0.7})</label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={data.temperature !== undefined ? data.temperature : 0.7}
-                onChange={(e) => handleChange('temperature', parseFloat(e.target.value))}
-                className="w-full accent-purple-500 cursor-pointer"
-              />
-            </div>
-          </div>
-        )}
-
-        {type === 'ollama' && (
+        {(type === 'ollama' || type === 'gemini') && (
           <div className="space-y-3">
             <div>
               <label className="block text-[11px] font-semibold text-slate-300 mb-1">Local Model (Ollama)</label>
               <select
-                value={data.model || 'qwen3:1.7b'}
+                value={data.model && !/^gemini/i.test(data.model) ? data.model : 'qwen3:1.7b'}
                 onChange={(e) => handleChange('model', e.target.value)}
                 className="w-full bg-dark-900 border border-dark-600 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
               >
@@ -230,7 +188,7 @@ export function NodeInspector() {
                 <option value="qwen3:8b">qwen3:8b (Best, needs 16GB RAM)</option>
               </select>
               <p className="text-[10px] text-slate-500 mt-1">
-                Pull it once with <span className="font-mono text-teal-400">ollama pull {data.model || 'qwen3:1.7b'}</span>
+                Pull it once with <span className="font-mono text-teal-400">ollama pull {data.model && !/^gemini/i.test(data.model) ? data.model : 'qwen3:1.7b'}</span>
               </p>
             </div>
             <div>
@@ -318,7 +276,7 @@ export function NodeInspector() {
                 rows={4}
                 value={data.body || ''}
                 onChange={(e) => handleChange('body', e.target.value)}
-                placeholder="{{gemini.text}}"
+                placeholder="{{ollama_1.text}}"
                 className="w-full bg-dark-900 border border-dark-600 rounded-lg p-2.5 text-xs text-white font-mono focus:outline-none focus:border-sky-500"
               />
             </div>
@@ -391,7 +349,7 @@ export function NodeInspector() {
               />
             </div>
             <p className="text-[10px] text-slate-500 leading-relaxed">
-              Splits the text into chunks and embeds each one (Gemini embeddings, or a free offline fallback). Wire a <span className="text-cyan-400">Retrieve</span> node after this to search them.
+              Splits the text into chunks and embeds each one (Qwen embeddings via Ollama, or a free offline fallback). Wire a <span className="text-cyan-400">Retrieve</span> node after this to search them.
             </p>
           </div>
         )}
@@ -423,7 +381,7 @@ export function NodeInspector() {
               />
             </div>
             <p className="text-[10px] text-slate-500 leading-relaxed">
-              Returns the most relevant chunks as <span className="font-mono text-cyan-400">&#123;&#123;retrieve.context&#125;&#125;</span> — feed that into a Gemini node’s prompt to answer from your document.
+              Returns the most relevant chunks as <span className="font-mono text-cyan-400">&#123;&#123;retrieve.context&#125;&#125;</span> — feed that into a Local AI node’s prompt to answer from your document.
             </p>
           </div>
         )}
@@ -443,7 +401,7 @@ export function NodeInspector() {
                   type="text"
                   value={data.leftValue || ''}
                   onChange={(e) => handleChange('leftValue', e.target.value)}
-                  placeholder="{{gemini_1.text}}"
+                  placeholder="{{ollama_1.text}}"
                   className="w-full bg-dark-900 border border-dark-600 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
                 />
               </div>

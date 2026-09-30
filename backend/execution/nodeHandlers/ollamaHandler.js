@@ -3,14 +3,17 @@ import { ollamaChat, getOllamaModel } from '../../utils/ollamaClient.js';
 
 /**
  * Local AI node — runs a prompt on a Qwen model through the local Ollama server.
- * Free, no API key. Output mirrors the Gemini node ({ text, model, ... }) so
- * {{ollama_1.text}} works in any downstream node.
+ * Free, no API key. Output is { text, model, ... } so {{ollama_1.text}} works in
+ * any downstream node.
+ *
+ * Also serves legacy "gemini" nodes from workflows saved before Gemini was
+ * removed; their Gemini model names are ignored in favour of the Qwen default.
  */
 export async function ollamaHandler(node, context) {
   const d = node.data || {};
   const prompt = resolveVariables(String(d.prompt ?? d.template ?? ''), context);
   const system = resolveVariables(String(d.system ?? ''), context).trim();
-  const model = d.model || getOllamaModel();
+  const model = d.model && !/^gemini/i.test(d.model) ? d.model : getOllamaModel();
   const temperature = d.temperature !== undefined ? parseFloat(d.temperature) : 0.7;
 
   if (!prompt.trim()) {

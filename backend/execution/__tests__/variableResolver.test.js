@@ -24,8 +24,8 @@ describe('resolveVariables', () => {
 
   describe('secrets domain', () => {
     it('resolves {{secrets.KEY}} to the secret value', () => {
-      const ctx = makeContext({ secrets: { GEMINI_API_KEY: 'abc123' } });
-      expect(resolveVariables('key is {{secrets.GEMINI_API_KEY}}', ctx)).toBe('key is abc123');
+      const ctx = makeContext({ secrets: { SMTP_PASS: 'abc123' } });
+      expect(resolveVariables('key is {{secrets.SMTP_PASS}}', ctx)).toBe('key is abc123');
     });
 
     it('leaves the placeholder untouched if the secret does not exist', () => {

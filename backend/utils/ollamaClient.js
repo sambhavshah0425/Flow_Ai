@@ -90,6 +90,50 @@ export async function ollamaChat({
   };
 }
 
+const DEFAULT_EMBED_MODEL = 'qwen3-embedding:0.6b';
+
+export function getOllamaEmbedModel() {
+  return process.env.OLLAMA_EMBED_MODEL || DEFAULT_EMBED_MODEL;
+}
+
+/**
+ * Embed a batch of texts in one call via Ollama's /api/embed.
+ * Returns one vector per input, in order. Throws with a "how to fix" message
+ * when Ollama is offline or the embedding model hasn't been pulled.
+ */
+export async function ollamaEmbed(texts, { model = getOllamaEmbedModel(), timeoutMs = 150000 } = {}) {
+  const baseUrl = getOllamaBaseUrl();
+
+  let res;
+  try {
+    res = await fetch(`${baseUrl}/api/embed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(timeoutMs),
+      body: JSON.stringify({ model, input: texts, keep_alive: '30m' })
+    });
+  } catch (err) {
+    if (err.name === 'TimeoutError') {
+      throw new Error(`Ollama embedding model "${model}" did not respond within ${Math.round(timeoutMs / 1000)}s.`);
+    }
+    throw offlineError(baseUrl);
+  }
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    if (res.status === 404 || /not found/i.test(body)) {
+      throw new Error(`Embedding model "${model}" is not installed in Ollama. Run: ollama pull ${model}`);
+    }
+    throw new Error(`Ollama error ${res.status}: ${body.slice(0, 300)}`);
+  }
+
+  const data = await res.json();
+  if (!Array.isArray(data.embeddings) || data.embeddings.length !== texts.length) {
+    throw new Error('Ollama returned an unexpected embedding response.');
+  }
+  return data.embeddings;
+}
+
 /**
  * Load the model and pre-read `systemPrompt` without waiting for a real answer
  * (generates 1 token). Ollama caches the processed prompt, so the user's next

@@ -74,10 +74,10 @@ export function SecretsModal({ isOpen, onClose }) {
         {/* Add Secret Form */}
         <form onSubmit={handleAddSecret} className="space-y-3 mb-6 bg-dark-900/60 p-4 rounded-xl border border-dark-700/60">
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">Secret Key Name (e.g. GEMINI_API_KEY)</label>
+            <label className="block text-xs font-medium text-slate-300 mb-1">Secret Key Name (e.g. SMTP_PASS)</label>
             <input
               type="text"
-              placeholder="GEMINI_API_KEY"
+              placeholder="SMTP_PASS"
               value={keyName}
               onChange={(e) => setKeyName(e.target.value.toUpperCase())}
               className="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-1.5 text-xs text-white uppercase focus:outline-none focus:border-brand-500 font-mono"

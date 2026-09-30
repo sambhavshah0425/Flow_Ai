@@ -1,6 +1,5 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { parseDAG } from '../execution/dagParser.js';
-import { getDecryptedUserSecrets } from './secretController.js';
+import { ollamaChat } from '../utils/ollamaClient.js';
 
 // SSRF Protection: Private / loopback hostnames and IP patterns
 const BLOCKED_HOST_PATTERNS = [
@@ -53,7 +52,7 @@ export function sanitizeAndValidateUrl(url) {
 }
 
 /**
- * System prompt definition for Gemini Meta-Planner
+ * System prompt for the local Qwen meta-planner
  */
 const SYSTEM_PROMPT = `
 You are the FlowForge OS Master AI Workflow Architect.
@@ -64,8 +63,8 @@ You have access to the following 10 FlowForge node types:
    data schema: { label: string, text: string }
    output reference: {{<nodeId>.text}}
 
-2. "gemini": Google Gemini AI reasoning / transformation.
-   data schema: { label: string, prompt: string, model: "gemini-flash-latest"|"gemini-1.5-flash", temperature: number, maxRetries: number, retryDelayMs: number }
+2. "ollama": Local AI (Qwen) reasoning / transformation. Use it for EVERY AI step.
+   data schema: { label: string, prompt: string, temperature: number }
    output reference: {{<nodeId>.text}}
 
 3. "api": HTTP REST API request.
@@ -83,11 +82,12 @@ You have access to the following 10 FlowForge node types:
 
 6. "embed": Text chunking & vector embedding.
    data schema: { label: string, text: string, chunkSize: number, overlap: number }
-   output reference: {{<nodeId>.chunks}}
+   output reference: {{<nodeId>.chunks}} (the chunk count; a retrieve node searches the index)
 
 7. "retrieve": Semantic / vector search against indexed embeddings.
    data schema: { label: string, query: string, topK: number }
-   output reference: {{<nodeId>.text}}, {{<nodeId>.results}}
+   output reference: {{<nodeId>.context}} (the matching passages), {{<nodeId>.matches}}
+   special note: must come after an embed node.
 
 8. "email": SMTP notification email.
    data schema: { label: string, to: string, subject: string, body: string, isHtml: boolean, smtpHost: "{{secrets.SMTP_HOST}}", smtpPort: 587, smtpUser: "{{secrets.SMTP_USER}}", smtpPass: "{{secrets.SMTP_PASS}}" }
@@ -110,7 +110,7 @@ Output must be STRICT JSON matching this schema:
   "nodes": [
     {
       "id": "node_id",
-      "type": "text"|"gemini"|"api"|"condition"|"pdf"|"embed"|"retrieve"|"email"|"delay"|"download",
+      "type": "text"|"ollama"|"api"|"condition"|"pdf"|"embed"|"retrieve"|"email"|"delay"|"download",
       "position": { "x": number, "y": number },
       "data": { "label": string, ... }
     }
@@ -130,7 +130,7 @@ Output must be STRICT JSON matching this schema:
 `;
 
 /**
- * Deterministic Intent Pattern Matcher (used when offline or no Gemini API Key is available)
+ * Deterministic Intent Pattern Matcher (used when Ollama is offline or returns an unusable workflow)
  */
 export function generateFallbackWorkflow(prompt = '') {
   const p = prompt.toLowerCase();
@@ -233,13 +233,12 @@ export function generateFallbackWorkflow(prompt = '') {
           }
         },
         {
-          id: 'gemini_1',
-          type: 'gemini',
+          id: 'ollama_1',
+          type: 'ollama',
           position: { x: 1000, y: 150 },
           data: {
-            label: 'Gemini RAG Synthesizer',
-            prompt: `Context retrieved from document:\n{{retrieve_1.text}}\n\nUser Question: ${prompt}\n\nProvide a precise, grounded answer:`,
-            model: 'gemini-flash-latest',
+            label: 'Local AI Answer',
+            prompt: `Context retrieved from document:\n{{retrieve_1.context}}\n\nUser Question: ${prompt}\n\nProvide a precise, grounded answer:`,
             temperature: 0.3
           }
         },
@@ -250,15 +249,15 @@ export function generateFallbackWorkflow(prompt = '') {
           data: {
             label: 'Save RAG Answer',
             fileName: 'rag_qa_result.txt',
-            text: '{{gemini_1.text}}'
+            text: '{{ollama_1.text}}'
           }
         }
       ],
       edges: [
         { id: 'e_pdf_embed', source: 'pdf_1', target: 'embed_1', animated: true, type: 'smoothstep' },
         { id: 'e_embed_retrieve', source: 'embed_1', target: 'retrieve_1', animated: true, type: 'smoothstep' },
-        { id: 'e_retrieve_gemini', source: 'retrieve_1', target: 'gemini_1', animated: true, type: 'smoothstep' },
-        { id: 'e_gemini_download', source: 'gemini_1', target: 'download_1', animated: true, type: 'smoothstep' }
+        { id: 'e_retrieve_ollama', source: 'retrieve_1', target: 'ollama_1', animated: true, type: 'smoothstep' },
+        { id: 'e_ollama_download', source: 'ollama_1', target: 'download_1', animated: true, type: 'smoothstep' }
       ]
     };
   }
@@ -267,7 +266,7 @@ export function generateFallbackWorkflow(prompt = '') {
   if (p.includes('api') || p.includes('fetch') || p.includes('url') || p.includes('http') || p.includes('summarize')) {
     return {
       name: 'API Data Intelligence & Export',
-      description: 'Fetches REST data from API, synthesizes insights with Gemini AI, and exports file output.',
+      description: 'Fetches REST data from API, synthesizes insights with local AI, and exports file output.',
       nodes: [
         {
           id: 'api_1',
@@ -281,13 +280,12 @@ export function generateFallbackWorkflow(prompt = '') {
           }
         },
         {
-          id: 'gemini_1',
-          type: 'gemini',
+          id: 'ollama_1',
+          type: 'ollama',
           position: { x: 450, y: 150 },
           data: {
-            label: 'Gemini Insight Engine',
+            label: 'Local AI Insights',
             prompt: `Analyze the following payload and extract key insights and summary:\n\n{{api_1.data}}\n\nUser request: ${prompt}`,
-            model: 'gemini-flash-latest',
             temperature: 0.7,
             maxRetries: 1,
             retryDelayMs: 500
@@ -300,18 +298,18 @@ export function generateFallbackWorkflow(prompt = '') {
           data: {
             label: 'Export Insights',
             fileName: 'api_analysis_report.txt',
-            text: '{{gemini_1.text}}'
+            text: '{{ollama_1.text}}'
           }
         }
       ],
       edges: [
-        { id: 'e_api_gemini', source: 'api_1', target: 'gemini_1', animated: true, type: 'smoothstep' },
-        { id: 'e_gemini_download', source: 'gemini_1', target: 'download_1', animated: true, type: 'smoothstep' }
+        { id: 'e_api_ollama', source: 'api_1', target: 'ollama_1', animated: true, type: 'smoothstep' },
+        { id: 'e_ollama_download', source: 'ollama_1', target: 'download_1', animated: true, type: 'smoothstep' }
       ]
     };
   }
 
-  // Default Pattern: Text Prompt to Gemini to Download
+  // Default Pattern: Text Prompt to Local AI to Download
   return {
     name: 'AI Agent Generation Pipeline',
     description: 'Autonomous multi-step pipeline synthesized from user goal.',
@@ -326,13 +324,12 @@ export function generateFallbackWorkflow(prompt = '') {
         }
       },
       {
-        id: 'gemini_1',
-        type: 'gemini',
+        id: 'ollama_1',
+        type: 'ollama',
         position: { x: 450, y: 150 },
         data: {
-          label: 'Gemini Executive Engine',
+          label: 'Local AI Writer',
           prompt: `Execute the following objective with full details:\n\n{{text_1.text}}`,
-          model: 'gemini-flash-latest',
           temperature: 0.7,
           maxRetries: 1,
           retryDelayMs: 500
@@ -345,13 +342,13 @@ export function generateFallbackWorkflow(prompt = '') {
         data: {
           label: 'Save Output File',
           fileName: 'workflow_output.txt',
-          text: '{{gemini_1.text}}'
+          text: '{{ollama_1.text}}'
         }
       }
     ],
     edges: [
-      { id: 'e_text_gemini', source: 'text_1', target: 'gemini_1', animated: true, type: 'smoothstep' },
-      { id: 'e_gemini_download', source: 'gemini_1', target: 'download_1', animated: true, type: 'smoothstep' }
+      { id: 'e_text_ollama', source: 'text_1', target: 'ollama_1', animated: true, type: 'smoothstep' },
+      { id: 'e_ollama_download', source: 'ollama_1', target: 'download_1', animated: true, type: 'smoothstep' }
     ]
   };
 }
@@ -374,13 +371,15 @@ export function normalizeAndValidateWorkflow(rawWorkflow) {
   }
 
   // Phase 1 & 2: Normalize Nodes
-  const validTypes = new Set(['text', 'gemini', 'ollama', 'api', 'condition', 'pdf', 'embed', 'retrieve', 'email', 'delay', 'download']);
+  const validTypes = new Set(['text', 'ollama', 'api', 'condition', 'pdf', 'embed', 'retrieve', 'email', 'delay', 'download']);
   const nodeMap = new Map();
   const normalizedNodes = [];
 
   rawNodes.forEach((n, idx) => {
     const id = (n.id || `node_${idx + 1}`).toLowerCase().replace(/[^a-z0-9_]/g, '_');
-    const type = validTypes.has(n.type?.toLowerCase()) ? n.type.toLowerCase() : 'text';
+    // Gemini was removed: a model that still emits "gemini" gets the local AI node.
+    const rawType = n.type?.toLowerCase() === 'gemini' ? 'ollama' : n.type?.toLowerCase();
+    const type = validTypes.has(rawType) ? rawType : 'text';
     const posX = typeof n.position?.x === 'number' ? n.position.x : 100 + idx * 350;
     const posY = typeof n.position?.y === 'number' ? n.position.y : 150;
 
@@ -391,10 +390,8 @@ export function normalizeAndValidateWorkflow(rawWorkflow) {
     if (type === 'api') {
       data.url = sanitizeAndValidateUrl(data.url);
       data.method = (data.method || 'GET').toUpperCase();
-    } else if (type === 'gemini') {
-      data.model = data.model || 'gemini-flash-latest';
-      data.prompt = data.prompt || 'Process input: {{text_1.text}}';
     } else if (type === 'ollama') {
+      if (typeof data.model === 'string' && /^gemini/i.test(data.model)) delete data.model;
       data.prompt = data.prompt || 'Process input: {{text_1.text}}';
     } else if (type === 'condition') {
       data.operator = data.operator || 'contains';
@@ -478,6 +475,44 @@ export function normalizeAndValidateWorkflow(rawWorkflow) {
   };
 }
 
+// JSON schema handed to Ollama's `format` option, so Qwen must reply with a
+// parseable workflow instead of prose.
+const WORKFLOW_SCHEMA = {
+  type: 'object',
+  properties: {
+    name: { type: 'string' },
+    description: { type: 'string' },
+    nodes: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          type: { type: 'string', enum: ['text', 'ollama', 'api', 'condition', 'pdf', 'embed', 'retrieve', 'email', 'delay', 'download'] },
+          data: { type: 'object' }
+        },
+        required: ['id', 'type', 'data']
+      }
+    },
+    edges: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          source: { type: 'string' },
+          target: { type: 'string' },
+          sourceHandle: { type: 'string' }
+        },
+        required: ['source', 'target']
+      }
+    }
+  },
+  required: ['name', 'nodes', 'edges']
+};
+
+// Local CPU generation is far slower than a cloud API; this still bounds a hang.
+const GENERATION_TIMEOUT_MS = 120000;
+
 /**
  * Controller endpoint: POST /api/workflows/generate-from-prompt
  */
@@ -493,55 +528,33 @@ export async function generateWorkflowFromPrompt(req, res) {
     }
 
     const cleanPrompt = prompt.trim();
-    const userId = req.user?._id || req.user?.id;
-
-    // Check user's encrypted secrets or env for GEMINI_API_KEY
-    const secrets = userId ? await getDecryptedUserSecrets(userId) : {};
-    const apiKey = secrets.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 
     let generatedWorkflow = null;
+    let mode = 'live_ai';
 
-    if (apiKey) {
-      try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-          model: 'gemini-flash-latest',
-          generationConfig: {
-            responseMimeType: 'application/json',
-            temperature: 0.2
-          },
-          systemInstruction: SYSTEM_PROMPT
-        });
-
-        const userGoalPrompt = `<user_goal>\n${cleanPrompt}\n</user_goal>`;
-        
-        // Wrap with a 6-second timeout so requests never hang on network delays
-        const generatePromise = model.generateContent(userGoalPrompt);
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('AI generation timed out after 6000ms')), 6000)
-        );
-
-        const result = await Promise.race([generatePromise, timeoutPromise]);
-        const responseText = result.response?.text();
-
-        if (responseText) {
-          const parsedJSON = JSON.parse(responseText);
-          generatedWorkflow = normalizeAndValidateWorkflow(parsedJSON);
-        }
-      } catch (aiErr) {
-        console.warn(`[AI Workflow Gen] Live Gemini attempt (${aiErr.message}) -> Served via deterministic fallback.`);
-        generatedWorkflow = normalizeAndValidateWorkflow(generateFallbackWorkflow(cleanPrompt));
-      }
-    } else {
-      // Offline / Free Tier Fallback Mode
+    try {
+      const result = await ollamaChat({
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: `<user_goal>\n${cleanPrompt}\n</user_goal>` }
+        ],
+        format: WORKFLOW_SCHEMA,
+        temperature: 0.2,
+        timeoutMs: GENERATION_TIMEOUT_MS
+      });
+      generatedWorkflow = normalizeAndValidateWorkflow(JSON.parse(result.text));
+    } catch (aiErr) {
+      // Ollama offline, model not pulled, timeout, or an unusable workflow.
+      console.warn(`[AI Workflow Gen] Local Qwen attempt failed (${aiErr.message}) -> Served via deterministic fallback.`);
       generatedWorkflow = normalizeAndValidateWorkflow(generateFallbackWorkflow(cleanPrompt));
+      mode = 'fallback_matcher';
     }
 
     return res.status(200).json({
       success: true,
       workflow: generatedWorkflow,
       autoRun: Boolean(autoRun),
-      mode: apiKey ? 'live_ai' : 'fallback_matcher'
+      mode
     });
   } catch (error) {
     console.error('Workflow generation error:', error);

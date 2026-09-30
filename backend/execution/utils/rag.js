@@ -1,9 +1,7 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { ollamaEmbed, getOllamaEmbedModel } from '../../utils/ollamaClient.js';
 
-// Gemini embedding models to try (first that works wins). gemini-embedding-001
-// is confirmed available on the free tier; the others are forward-compatible.
-const EMBED_MODELS = ['gemini-embedding-001', 'gemini-embedding-2', 'gemini-embedding-2-preview'];
 const LOCAL_DIM = 512;
+export const LOCAL_EMBED_MODEL = 'local-tfidf';
 
 /**
  * Split text into overlapping chunks, packing whole paragraphs up to ~size chars
@@ -50,9 +48,10 @@ export function cosineSim(a, b) {
 }
 
 /**
- * Deterministic, offline bag-of-words embedding — the free fallback when no
- * Gemini key is available. Term-frequency into a fixed hashed dimension, L2
- * normalized. Not as strong as neural embeddings, but retrieval still works.
+ * Deterministic, offline bag-of-words embedding — the fallback when Ollama or
+ * its embedding model is unavailable. Term-frequency into a fixed hashed
+ * dimension, L2 normalized. Not as strong as neural embeddings, but retrieval
+ * still works.
  */
 // Common English stopwords are dropped so content words drive similarity
 // (otherwise "the"/"a"/"is" dominate the term-frequency vector).
@@ -75,36 +74,30 @@ export function localEmbed(text) {
   return vec.map((x) => x / norm);
 }
 
-async function geminiEmbed(texts, apiKey, model) {
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const m = genAI.getGenerativeModel({ model });
-  const vectors = [];
-  for (const t of texts) {
-    const r = await m.embedContent(t);
-    vectors.push(r.embedding.values);
-  }
-  return vectors;
-}
-
 /**
- * Embed an array of texts. Uses Gemini neural embeddings when a key is present,
- * falling back to the local offline embedding otherwise (or on API failure).
- * Returns { vectors, model, isLocal }. Pass opts.forceLocal / opts.model to keep
- * a query in the SAME embedding space as its previously-indexed chunks.
+ * Embed an array of texts. Uses Qwen neural embeddings through Ollama, falling
+ * back to the offline embedding when Ollama is unreachable or the model isn't
+ * pulled. Returns { vectors, model, isLocal } where isLocal marks the offline
+ * fallback.
+ *
+ * To keep a query in the SAME space as previously-indexed chunks, pass
+ * opts.forceLocal (chunks used the fallback) or opts.model (chunks used that
+ * Ollama model). With opts.model the fallback is disabled: a query embedded
+ * differently from its chunks would produce meaningless similarity scores.
  */
-export async function embedTexts(texts, apiKey, opts = {}) {
-  if (apiKey && !opts.forceLocal) {
-    const models = opts.model && !opts.model.startsWith('local')
-      ? [opts.model, ...EMBED_MODELS.filter((m) => m !== opts.model)]
-      : EMBED_MODELS;
-    for (const model of models) {
-      try {
-        const vectors = await geminiEmbed(texts, apiKey, model);
-        return { vectors, model, isLocal: false };
-      } catch {
-        // try the next model, then fall through to local
-      }
-    }
+export async function embedTexts(texts, opts = {}) {
+  if (opts.forceLocal) {
+    return { vectors: texts.map(localEmbed), model: LOCAL_EMBED_MODEL, isLocal: true };
   }
-  return { vectors: texts.map(localEmbed), model: 'local-tfidf', isLocal: true };
+  if (opts.model) {
+    const vectors = await ollamaEmbed(texts, { model: opts.model });
+    return { vectors, model: opts.model, isLocal: false };
+  }
+  const model = getOllamaEmbedModel();
+  try {
+    const vectors = await ollamaEmbed(texts, { model });
+    return { vectors, model, isLocal: false };
+  } catch {
+    return { vectors: texts.map(localEmbed), model: LOCAL_EMBED_MODEL, isLocal: true };
+  }
 }

@@ -6,7 +6,7 @@ const MAX_CHUNKS = 60; // cap embed calls per node for cost/latency safety
 /**
  * Embed & Index node — chunks the input text, embeds each chunk, and stores the
  * vectors on the ExecutionContext so a downstream Retrieve node can search them.
- * Uses Gemini embeddings when a key is present, else a free offline fallback.
+ * Uses Qwen embeddings via Ollama, else a free offline fallback.
  */
 export async function embedHandler(node, context) {
   const d = node.data || {};
@@ -24,8 +24,10 @@ export async function embedHandler(node, context) {
     return { chunks: 0, model: 'none', isLocal: true, indexedChars: 0, note: 'No text to index — check the upstream source.' };
   }
 
-  const apiKey = context.secrets?.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-  const { vectors, model, isLocal } = await embedTexts(chunks, apiKey);
+  const { vectors, model, isLocal } = await embedTexts(chunks);
+  if (isLocal) {
+    context.addLog(node.id, 'embed', 'warn', 'Ollama embedding model unavailable — used the offline keyword embedding instead.');
+  }
 
   context.vectorStore = context.vectorStore || [];
   chunks.forEach((t, i) => context.vectorStore.push({ text: t, vector: vectors[i] }));

@@ -7,7 +7,7 @@ const STACK = [
   { name: 'Node.js + Express', icon: Server },
   { name: 'MongoDB', icon: Database },
   { name: 'Socket.IO', icon: Wifi },
-  { name: 'Google Gemini', icon: Sparkles }
+  { name: 'Ollama + Qwen', icon: Sparkles }
 ];
 
 export function StackStrip() {

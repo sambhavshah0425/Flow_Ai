@@ -56,7 +56,7 @@ describe('parseDAG', () => {
     it('preserves each node object (not just IDs) in orderedNodes', () => {
       const nodes = [
         { id: 'A', type: 'text', data: { text: 'hello' } },
-        { id: 'B', type: 'gemini', data: { prompt: '{{A.text}}' } }
+        { id: 'B', type: 'ollama', data: { prompt: '{{A.text}}' } }
       ];
       const edges = [{ source: 'A', target: 'B' }];
 

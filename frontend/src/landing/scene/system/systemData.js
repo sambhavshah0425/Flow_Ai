@@ -22,7 +22,7 @@ export const INFO_CARDS = [
 const ICON_ROW_1 = [
   { id: 'tile_text', label: 'Text Input', icon: 'Type', color: '#0059ff' },
   { id: 'tile_pdf', label: 'PDF Parser', icon: 'FileText', color: '#4d8cff' },
-  { id: 'tile_gemini', label: 'Gemini AI', icon: 'Sparkles', color: '#7aa7ff' },
+  { id: 'tile_ollama', label: 'Qwen AI', icon: 'Sparkles', color: '#7aa7ff' },
   { id: 'tile_api', label: 'REST API', icon: 'Globe', color: '#0047d1' },
   { id: 'tile_email', label: 'Send Email', icon: 'Mail', color: '#3d7bff' },
   { id: 'tile_condition', label: 'Branch (IF)', icon: 'GitBranch', color: '#0059ff' },
@@ -33,7 +33,7 @@ const ICON_ROW_2 = [
   { id: 'tile_download', label: 'Downloader', icon: 'Download', color: '#4d8cff' },
   { id: 'tile_retrieve', label: 'Retrieve DB', icon: 'Search', color: '#0059ff' },
   { id: 'tile_embed', label: 'Embeddings', icon: 'Database', color: '#0037a3' },
-  { id: 'tile_gemini2', label: 'Vision AI', icon: 'Sparkles', color: '#7aa7ff' },
+  { id: 'tile_ollama2', label: 'Vision AI', icon: 'Sparkles', color: '#7aa7ff' },
   { id: 'tile_api2', label: 'Webhook', icon: 'Globe', color: '#0047d1' },
   { id: 'tile_db2', label: 'DB Cache', icon: 'Database', color: '#12408f' },
   { id: 'tile_alert', label: 'System Alert', icon: 'Mail', color: '#3d7bff' },

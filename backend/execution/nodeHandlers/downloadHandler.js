@@ -2,7 +2,7 @@ import { resolveVariables } from '../utils/variableResolver.js';
 
 export async function downloadHandler(node, context) {
   const nodeData = node.data || {};
-  const rawInput = nodeData.text || nodeData.content || '{{gemini.text}}';
+  const rawInput = nodeData.text || nodeData.content || '{{ollama.text}}';
   const fileName = nodeData.fileName || 'result.txt';
 
   const resolvedContent = resolveVariables(rawInput, context);

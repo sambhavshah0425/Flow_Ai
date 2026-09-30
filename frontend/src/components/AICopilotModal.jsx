@@ -19,12 +19,12 @@ const PRESETS = [
   {
     icon: <Zap className="w-4 h-4 text-amber-400" />,
     title: 'API Summarizer',
-    prompt: 'Fetch latest posts from https://jsonplaceholder.typicode.com/posts/1, summarize key points with Gemini AI, and save the result as a text file.'
+    prompt: 'Fetch latest posts from https://jsonplaceholder.typicode.com/posts/1, summarize key points with local AI, and save the result as a text file.'
   },
   {
     icon: <FileText className="w-4 h-4 text-brand-400" />,
     title: 'Document Vector RAG',
-    prompt: 'Ingest PDF document, generate vector embeddings, retrieve relevant chunks for questions, and synthesize answers with Gemini AI.'
+    prompt: 'Ingest PDF document, generate vector embeddings, retrieve relevant chunks for questions, and synthesize answers with local AI.'
   },
   {
     icon: <Mail className="w-4 h-4 text-emerald-400" />,
@@ -34,7 +34,7 @@ const PRESETS = [
   {
     icon: <Cpu className="w-4 h-4 text-purple-400" />,
     title: 'Autonomous AI Writer',
-    prompt: 'Synthesize a comprehensive technical report on next-generation agentic workflows using Gemini AI and download the formatted analysis.'
+    prompt: 'Synthesize a comprehensive technical report on next-generation agentic workflows using local AI and download the formatted analysis.'
   }
 ];
 
@@ -115,7 +115,7 @@ export function AICopilotModal({ isOpen, onClose, onWorkflowReady }) {
               rows={4}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="e.g. Fetch user data from an API, summarize their interests with Gemini AI, and if positive, send an email report, else download as file..."
+              placeholder="e.g. Fetch user data from an API, summarize their interests with local AI, and if positive, send an email report, else download as file..."
               className="w-full bg-dark-800/80 border border-dark-600/80 focus:border-brand-500 rounded-2xl p-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 resize-none transition-all"
               disabled={isGeneratingWorkflow}
             />
