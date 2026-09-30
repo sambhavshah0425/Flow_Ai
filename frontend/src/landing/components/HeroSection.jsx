@@ -105,7 +105,7 @@ export function HeroSection() {
                 <p className="text-[9px] text-slate-400 mt-1 font-mono leading-relaxed truncate">&#123;&#123;pdf_reader.text&#125;&#125;</p>
               </div>
 
-              {/* Card 2: Gemini AI (Teal/Emerald gradient) */}
+              {/* Card 2: Local AI (Teal/Emerald gradient) */}
               <div 
                 className="absolute bottom-2 left-[20%] rotate-[4deg] z-30 w-48 sm:w-56 p-4 bg-gradient-to-br from-emerald-500/20 to-teal-600/30 border border-emerald-400/40 rounded-2xl shadow-2xl backdrop-blur-md pointer-events-auto"
                 style={{ transform: 'rotate(4deg)' }}
@@ -114,8 +114,8 @@ export function HeroSection() {
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                   <span className="text-[9px] font-mono text-emerald-300 font-bold uppercase tracking-wider">2. AI Model</span>
                 </div>
-                <h4 className="text-xs font-bold text-white tracking-tight">Gemini AI agent</h4>
-                <p className="text-[9px] text-slate-300 mt-1 leading-relaxed">Model fallback & retry active</p>
+                <h4 className="text-xs font-bold text-white tracking-tight">Qwen AI agent</h4>
+                <p className="text-[9px] text-slate-300 mt-1 leading-relaxed">Runs locally via Ollama</p>
               </div>
 
               {/* Card 3: REST API (Light Grey) */}

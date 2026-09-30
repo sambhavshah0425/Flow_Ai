@@ -40,8 +40,8 @@ describe('conditionHandler', () => {
   });
 
   it('resolves {{template}} operands from context', async () => {
-    const context = ctx({ gemini_1: { text: 'sentiment: negative' } });
-    const out = await run({ leftValue: '{{gemini_1.text}}', operator: 'contains', rightValue: 'negative' }, context);
+    const context = ctx({ ollama_1: { text: 'sentiment: negative' } });
+    const out = await run({ leftValue: '{{ollama_1.text}}', operator: 'contains', rightValue: 'negative' }, context);
     expect(out.branch).toBe('true');
     expect(out.left).toBe('sentiment: negative');
   });

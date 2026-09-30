@@ -32,7 +32,7 @@ export default {
           700: '#1f2937',
           600: '#374151',
         },
-        aiv: { 400: '#a78bfa', 500: '#8b5cf6', 600: '#7c3aed', 900: '#4c1d95' }, // Gemini / AI
+        aiv: { 400: '#a78bfa', 500: '#8b5cf6', 600: '#7c3aed', 900: '#4c1d95' }, // AI
         flow: { 400: '#22d3ee', 500: '#06b6d4' },                                 // data-flow / edges
         run: { 400: '#34d399', 500: '#22c55e', 600: '#16a34a' },                  // execution / "Run"
 

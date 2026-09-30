@@ -15,7 +15,7 @@ import { fileURLToPath } from 'url';
 
 // Resolve .env relative to THIS file (backend/config/loadEnv.js -> backend/.env),
 // not process.cwd(). Otherwise the key silently fails to load when the server is
-// started from the repo root (e.g. `npm run dev:backend`), dropping Gemini to mock mode.
+// started from the repo root (e.g. `npm run dev:backend`), silently falling back to dev-only secrets.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });

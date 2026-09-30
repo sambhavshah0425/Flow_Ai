@@ -12,7 +12,8 @@ export async function extractPdfText(buffer) {
   try {
     const result = await parser.getText();
     return {
-      text: (result.text || '').trim(),
+      // pdf-parse separates pages with "-- 1 of 2 --" lines: noise for the AI
+      text: (result.text || '').replace(/^-- \d+ of \d+ --$/gm, '').replace(/\n{3,}/g, '\n\n').trim(),
       pageCount: result.total || result.pages?.length || 0
     };
   } finally {

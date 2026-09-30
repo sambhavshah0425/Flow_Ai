@@ -1,6 +1,5 @@
 import { TextNode } from './TextNode';
 import { PDFNode } from './PDFNode';
-import { GeminiNode } from './GeminiNode';
 import { APINode } from './APINode';
 import { DelayNode } from './DelayNode';
 import { DownloadNode } from './DownloadNode';
@@ -13,7 +12,6 @@ import { OllamaNode } from './OllamaNode';
 export const nodeTypes = {
   text: TextNode,
   pdf: PDFNode,
-  gemini: GeminiNode,
   api: APINode,
   delay: DelayNode,
   download: DownloadNode,
@@ -21,5 +19,7 @@ export const nodeTypes = {
   embed: EmbedNode,
   retrieve: RetrieveNode,
   email: EmailNode,
-  ollama: OllamaNode
+  ollama: OllamaNode,
+  // Legacy: workflows saved with Gemini nodes now render (and run) as Local AI
+  gemini: OllamaNode
 };

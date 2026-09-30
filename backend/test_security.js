@@ -168,7 +168,7 @@ async function runTests() {
       await axios.post(`${API_URL}/executions/run`, {
         workflowData: {
           name: 'Malformed nodes',
-          nodes: [{ id: '', type: 'gemini' }],
+          nodes: [{ id: '', type: 'ollama' }],
           edges: []
         }
       }, headersA);

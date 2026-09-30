@@ -34,14 +34,16 @@ describe('AI Workflow Controller Unit Tests', () => {
     it('synthesizes API Summarizer pipeline for API-related prompts', () => {
       const wf = generateFallbackWorkflow('Fetch top posts from API and summarize them');
       expect(wf.nodes.length).toBe(3);
-      expect(wf.nodes.map(n => n.type)).toEqual(['api', 'gemini', 'download']);
+      expect(wf.nodes.map(n => n.type)).toEqual(['api', 'ollama', 'download']);
       expect(wf.edges.length).toBe(2);
     });
 
     it('synthesizes RAG Document Q&A pipeline for PDF prompts', () => {
       const wf = generateFallbackWorkflow('Ingest PDF document, embed and retrieve semantic answers');
+      // The answer node must read the retrieve node's real output field
+      expect(wf.nodes.find(n => n.type === 'ollama').data.prompt).toContain('{{retrieve_1.context}}');
       expect(wf.nodes.length).toBe(5);
-      expect(wf.nodes.map(n => n.type)).toEqual(['pdf', 'embed', 'retrieve', 'gemini', 'download']);
+      expect(wf.nodes.map(n => n.type)).toEqual(['pdf', 'embed', 'retrieve', 'ollama', 'download']);
       expect(wf.edges.length).toBe(4);
     });
 
@@ -56,7 +58,7 @@ describe('AI Workflow Controller Unit Tests', () => {
     it('synthesizes General Pipeline for general prompt', () => {
       const wf = generateFallbackWorkflow('Write a creative story about space exploration');
       expect(wf.nodes.length).toBe(3);
-      expect(wf.nodes.map(n => n.type)).toEqual(['text', 'gemini', 'download']);
+      expect(wf.nodes.map(n => n.type)).toEqual(['text', 'ollama', 'download']);
     });
   });
 
@@ -67,7 +69,7 @@ describe('AI Workflow Controller Unit Tests', () => {
         description: 'Testing normalization',
         nodes: [
           { id: 'input_node', type: 'text', data: { text: 'Hello' } },
-          { id: 'ai_node', type: 'gemini', data: { prompt: 'Translate' } }
+          { id: 'ai_node', type: 'ollama', data: { prompt: 'Translate' } }
         ],
         edges: [
           { source: 'input_node', target: 'ai_node' }
@@ -88,7 +90,7 @@ describe('AI Workflow Controller Unit Tests', () => {
         name: 'Cyclic Workflow',
         nodes: [
           { id: 'node_a', type: 'text' },
-          { id: 'node_b', type: 'gemini' }
+          { id: 'node_b', type: 'ollama' }
         ],
         edges: [
           { source: 'node_a', target: 'node_b' },
@@ -97,6 +99,15 @@ describe('AI Workflow Controller Unit Tests', () => {
       };
 
       expect(() => normalizeAndValidateWorkflow(cyclicRaw)).toThrow(/Circular dependency/i);
+    });
+
+    it('converts legacy gemini nodes to the local AI node', () => {
+      const normalized = normalizeAndValidateWorkflow({
+        nodes: [{ id: 'ai', type: 'gemini', data: { prompt: 'hi', model: 'gemini-flash-latest' } }],
+        edges: []
+      });
+      expect(normalized.nodes[0].type).toBe('ollama');
+      expect(normalized.nodes[0].data.model).toBeUndefined();
     });
 
     it('throws error when workflow has no nodes', () => {

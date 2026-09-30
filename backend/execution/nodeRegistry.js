@@ -1,6 +1,6 @@
 /**
  * NodeRegistry - Plugin Architecture Registry
- * Maps node types (e.g. 'text', 'pdf', 'gemini', 'api', 'delay', 'download')
+ * Maps node types (e.g. 'text', 'pdf', 'ollama', 'api', 'delay', 'download')
  * to execution handlers dynamically.
  */
 class NodeRegistry {
@@ -10,7 +10,7 @@ class NodeRegistry {
 
   /**
    * Register a node type handler
-   * @param {string} type - Unique node type key (e.g., 'gemini')
+   * @param {string} type - Unique node type key (e.g., 'ollama')
    * @param {Function} handlerFn - Async function (nodeData, context) => outputPayload
    */
   register(type, handlerFn) {

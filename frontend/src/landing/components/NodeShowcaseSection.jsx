@@ -23,8 +23,8 @@ const COPY = {
     },
     {
       icon: Sparkles,
-      name: 'Gemini AI',
-      desc: 'Live Google Gemini calls with automatic model fallback and retry when a model is overloaded.',
+      name: 'Local AI (Qwen)',
+      desc: 'Qwen runs on your own machine through Ollama: free, private, no API key.',
       accent: 'text-lp-100 bg-lp-500/15 border-lp-500/30'
     },
     {

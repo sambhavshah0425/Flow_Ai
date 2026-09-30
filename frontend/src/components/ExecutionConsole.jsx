@@ -111,10 +111,25 @@ function getPreviewText(value) {
   return JSON.stringify(value);
 }
 
+const PREVIEW_CHARS = 240;
+const AI_TYPES = new Set(['ollama', 'gemini']);
+
+// Results first: the AI answer and the workflow's final steps are what the user
+// ran it for; inputs such as the extracted PDF text go last.
+function outputRank(node, sinkIds) {
+  if (AI_TYPES.has(node?.type)) return 0;
+  if (sinkIds.has(node?.id)) return 1;
+  if (node?.type === 'pdf' || node?.type === 'text') return 3;
+  return 2;
+}
+
 function OutputCard({ node, value }) {
   const [showRaw, setShowRaw] = useState(false);
   const preview = getPreviewText(value);
-  const truncated = preview.length > 240 ? preview.slice(0, 240) + '…' : preview;
+  // AI answers open in full; long inputs (e.g. PDF text) start collapsed.
+  const [expanded, setExpanded] = useState(AI_TYPES.has(node?.type));
+  const isLong = preview.length > PREVIEW_CHARS;
+  const truncated = isLong && !expanded ? preview.slice(0, PREVIEW_CHARS) + '…' : preview;
 
   // Download nodes carry a downloadUrl + content; show real save-to-disk buttons
   const isDownloadable =
@@ -170,6 +185,14 @@ function OutputCard({ node, value }) {
       <p className="text-slate-200 text-[12px] leading-relaxed whitespace-pre-wrap">
         {truncated || <span className="italic text-slate-500">(no text output)</span>}
       </p>
+      {isLong && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-[10px] font-semibold text-brand-400 hover:text-brand-300"
+        >
+          {expanded ? 'Show less' : `Show full text (${preview.length.toLocaleString()} chars)`}
+        </button>
+      )}
 
       {showRaw && (
         <pre className="text-emerald-300 text-[11px] whitespace-pre-wrap overflow-x-auto bg-dark-950 p-2 rounded">
@@ -180,7 +203,7 @@ function OutputCard({ node, value }) {
   );
 }
 
-export function ExecutionConsole({ nodes = [] }) {
+export function ExecutionConsole({ nodes = [], edges = [] }) {
   const [isOpen, setIsOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('logs'); // 'logs' | 'outputs' | 'metrics'
 
@@ -189,8 +212,12 @@ export function ExecutionConsole({ nodes = [] }) {
   // Only show one card per REAL node (matched by actual node.id), skipping the
   // label/type alias keys the backend also stores for {{...}} template lookups.
   const realNodeIds = new Set(nodes.map((n) => n.id));
-  const dedupedOutputs = Object.entries(nodeOutputs).filter(([key]) => realNodeIds.has(key));
   const nodesById = Object.fromEntries(nodes.map((n) => [n.id, { id: n.id, label: n.data?.label, type: n.type }]));
+  const sourceIds = new Set(edges.map((e) => e.source));
+  const sinkIds = new Set(nodes.filter((n) => !sourceIds.has(n.id)).map((n) => n.id));
+  const dedupedOutputs = Object.entries(nodeOutputs)
+    .filter(([key]) => realNodeIds.has(key))
+    .sort(([a], [b]) => outputRank(nodesById[a], sinkIds) - outputRank(nodesById[b], sinkIds));
 
   return (
     <div className="bg-dark-950/95 border-t border-dark-700/80 backdrop-blur-xl transition-all duration-300 z-30">

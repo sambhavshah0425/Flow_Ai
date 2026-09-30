@@ -9,21 +9,21 @@ import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion
  * (no pulses, no float, no scroll-linked transforms).
  */
 
-// ---- Graph definition (mirrors a real workflow: inputs → Gemini → outputs) ----
+// ---- Graph definition (mirrors a real workflow: inputs → Local AI → outputs) ----
 const NODES = [
   { id: 'text_1',     x: 40,  y: 120, w: 170, h: 64, color: '#0059ff', label: 'Text Input',  sub: 'prompt · {{text_1.text}}',   status: 'done' },
   { id: 'pdf_1',      x: 40,  y: 330, w: 170, h: 64, color: '#4d8cff', label: 'PDF Reader',  sub: '11 pages extracted',          status: 'done' },
-  { id: 'gemini_1',   x: 360, y: 225, w: 200, h: 76, color: '#7aa7ff', label: 'Gemini AI',   sub: 'Summarize {{pdf_1.text}}',    status: 'running' },
+  { id: 'ollama_1',   x: 360, y: 225, w: 200, h: 76, color: '#7aa7ff', label: 'Local AI',    sub: 'Summarize {{pdf_1.text}}',    status: 'running' },
   { id: 'api_1',      x: 700, y: 70,  w: 180, h: 64, color: '#0059ff', label: 'REST API',    sub: 'POST /notify · 200 OK',       status: 'queued' },
   { id: 'delay_1',    x: 700, y: 245, w: 180, h: 64, color: '#4d8cff', label: 'Delay Timer', sub: 'wait 1900 ms',                status: 'queued' },
   { id: 'download_1', x: 700, y: 420, w: 180, h: 64, color: '#7aa7ff', label: 'Download',    sub: 'ai_summary.txt',              status: 'queued' }
 ];
 
 const EDGES = [
-  { id: 'edge-text-gemini',   d: 'M210,152 C300,152 270,263 360,263', dur: '2.6s', begin: '0s' },
-  { id: 'edge-pdf-gemini',    d: 'M210,362 C300,362 270,263 360,263', dur: '2.6s', begin: '0.9s' },
-  { id: 'edge-gemini-api',    d: 'M560,263 C645,263 615,102 700,102', dur: '2.2s', begin: '0.4s' },
-  { id: 'edge-gemini-delay',  d: 'M560,263 C645,263 615,277 700,277', dur: '2.2s', begin: '1.3s' },
+  { id: 'edge-text-ollama',   d: 'M210,152 C300,152 270,263 360,263', dur: '2.6s', begin: '0s' },
+  { id: 'edge-pdf-ollama',    d: 'M210,362 C300,362 270,263 360,263', dur: '2.6s', begin: '0.9s' },
+  { id: 'edge-ollama-api',    d: 'M560,263 C645,263 615,102 700,102', dur: '2.2s', begin: '0.4s' },
+  { id: 'edge-ollama-delay',  d: 'M560,263 C645,263 615,277 700,277', dur: '2.2s', begin: '1.3s' },
   { id: 'edge-delay-download',d: 'M790,309 C790,355 790,375 790,420', dur: '1.8s', begin: '0.6s' }
 ];
 
@@ -82,7 +82,7 @@ export default function NodeNetwork() {
         <svg
           viewBox="0 0 920 560"
           role="img"
-          aria-label="Diagram of a FlowForge OS pipeline: Text Input and PDF Reader nodes feed a Gemini AI node, whose output flows to REST API, Delay Timer, and Download nodes, with data pulses traveling along the connections."
+          aria-label="Diagram of a FlowForge OS pipeline: Text Input and PDF Reader nodes feed a Local AI (Qwen) node, whose output flows to REST API, Delay Timer, and Download nodes, with data pulses traveling along the connections."
           className="w-full h-auto select-none"
         >
           <title>FlowForge OS pipeline in mid-execution</title>

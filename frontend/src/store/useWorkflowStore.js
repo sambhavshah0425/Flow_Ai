@@ -10,22 +10,22 @@ export const DEFAULT_NODES = [
     data: { label: 'Input Prompt', text: 'Summarize key insights regarding AI workflow automation.' }
   },
   {
-    id: 'gemini_1',
-    type: 'gemini',
+    id: 'ollama_1',
+    type: 'ollama',
     position: { x: 450, y: 150 },
-    data: { label: 'Gemini AI', prompt: '{{text_1.text}}', model: 'gemini-flash-latest', temperature: 0.7, maxRetries: 1, retryDelayMs: 500 }
+    data: { label: 'Local AI (Qwen)', prompt: '{{text_1.text}}', model: 'qwen3:1.7b', temperature: 0.7 }
   },
   {
     id: 'download_1',
     type: 'download',
     position: { x: 800, y: 150 },
-    data: { label: 'Download Summary', text: '{{gemini_1.text}}', fileName: 'ai_summary.txt' }
+    data: { label: 'Download Summary', text: '{{ollama_1.text}}', fileName: 'ai_summary.txt' }
   }
 ];
 
 const DEFAULT_EDGES = [
-  { id: 'e1', source: 'text_1', target: 'gemini_1', type: 'smoothstep', animated: true },
-  { id: 'e2', source: 'gemini_1', target: 'download_1', type: 'smoothstep', animated: true }
+  { id: 'e1', source: 'text_1', target: 'ollama_1', type: 'smoothstep', animated: true },
+  { id: 'e2', source: 'ollama_1', target: 'download_1', type: 'smoothstep', animated: true }
 ];
 
 // True when the canvas still holds the untouched starter template (positions and
@@ -108,7 +108,6 @@ export const useWorkflowStore = create((set, get) => ({
       data: {
         label: `${nodeType.toUpperCase()} Node`,
         ...(nodeType === 'text' && { text: 'Sample text' }),
-        ...(nodeType === 'gemini' && { prompt: 'Process input text', model: 'gemini-flash-latest', maxRetries: 1, retryDelayMs: 500 }),
         ...(nodeType === 'ollama' && { prompt: 'Summarize: {{text_1.text}}', model: 'qwen3:1.7b', temperature: 0.7 }),
         ...(nodeType === 'api' && { url: 'https://jsonplaceholder.typicode.com/posts/1', method: 'GET' }),
         ...(nodeType === 'condition' && { leftValue: '{{text_1.text}}', operator: 'contains', rightValue: 'yes' }),
@@ -117,7 +116,7 @@ export const useWorkflowStore = create((set, get) => ({
         ...(nodeType === 'email' && {
           to: '',
           subject: 'FlowForge notification',
-          body: '{{gemini.text}}',
+          body: '{{ollama.text}}',
           smtpHost: '{{secrets.SMTP_HOST}}',
           smtpPort: 587,
           smtpUser: '{{secrets.SMTP_USER}}',

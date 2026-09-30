@@ -62,14 +62,14 @@ async function runAllNodesTest() {
         data: { operator: 'contains', left: '{{text_node.text}}', right: 'visual' }
       },
       {
-        id: 'gemini_node',
-        type: 'gemini',
-        data: { prompt: 'Summarize the retrieve context output: {{retrieve_node.context}}', model: 'gemini-flash-latest' }
+        id: 'ollama_node',
+        type: 'ollama',
+        data: { prompt: 'Summarize the retrieve context output: {{retrieve_node.context}}' }
       },
       {
         id: 'download_node',
         type: 'download',
-        data: { text: '{{gemini_node.text}}', fileName: 'pipeline_summary.txt' }
+        data: { text: '{{ollama_node.text}}', fileName: 'pipeline_summary.txt' }
       },
       {
         id: 'email_node',
@@ -92,8 +92,8 @@ async function runAllNodesTest() {
       { id: 'e4', source: 'api_node', target: 'embed_node' },
       { id: 'e5', source: 'embed_node', target: 'retrieve_node' },
       { id: 'e6', source: 'retrieve_node', target: 'condition_node' },
-      { id: 'e7', source: 'condition_node', target: 'gemini_node' },
-      { id: 'e8', source: 'gemini_node', target: 'download_node' },
+      { id: 'e7', source: 'condition_node', target: 'ollama_node' },
+      { id: 'e8', source: 'ollama_node', target: 'download_node' },
       { id: 'e9', source: 'download_node', target: 'email_node' }
     ]
   };

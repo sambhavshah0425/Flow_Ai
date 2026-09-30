@@ -36,7 +36,7 @@ const SOLUTION_COPY = {
     },
     {
       title: 'Powerful Integrations',
-      desc: 'Connect to Gemini, raw text prompts, PDF readers, dynamic REST APIs, and file systems natively.'
+      desc: 'Connect to local Qwen AI, raw text prompts, PDF readers, dynamic REST APIs, and file systems natively.'
     },
     {
       title: 'Smart Automation',
@@ -176,7 +176,7 @@ export function ProblemSolutionSection() {
                     <div className="absolute top-10 left-48 w-36 border border-emerald-500/30 bg-[#0a1527] p-3 rounded-xl shadow-md">
                       <div className="text-[9px] uppercase tracking-wider font-bold text-emerald-400">AI Agent</div>
                       <div className="text-[11px] font-bold text-white mt-0.5">Analyze Profile</div>
-                      <div className="mt-2 text-[9px] font-mono text-slate-400">Gemini 1.5 Flash</div>
+                      <div className="mt-2 text-[9px] font-mono text-slate-400">Qwen3 (local)</div>
                     </div>
 
                     {/* Node 3: Condition */}

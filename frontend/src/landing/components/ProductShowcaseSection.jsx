@@ -34,7 +34,7 @@ const TABS = [
               </div>
               <div className="self-center w-0.5 h-4 bg-emerald-500/20" />
               <div className="self-center border border-emerald-500/40 bg-emerald-500/5 px-3 py-2 rounded-lg text-[10px] font-mono w-32 text-center text-emerald-400 font-bold">
-                AI Agent (Gemini)
+                AI Agent (Qwen)
               </div>
             </div>
           </div>
@@ -47,9 +47,9 @@ const TABS = [
     label: 'Integrations',
     icon: Wrench,
     headline: 'Connect to Any Backend API',
-    desc: 'Chain Google Gemini prompts, dynamic REST calls, PDF parsing, and local down-stream file export natively.',
+    desc: 'Chain local Qwen prompts, dynamic REST calls, PDF parsing, and local down-stream file export natively.',
     features: [
-      { name: '6 Native Core Nodes', desc: 'Prebuilt handlers for PDF read, REST JSON requests, Gemini generative chains, delay timers.' },
+      { name: '6 Native Core Nodes', desc: 'Prebuilt handlers for PDF read, REST JSON requests, local Qwen AI chains, delay timers.' },
       { name: 'Plugin Registry', desc: 'Extend capabilities with your own server-side handlers without changing engine code.' }
     ],
     mockup: (
@@ -60,7 +60,7 @@ const TABS = [
         </div>
         <div className="space-y-2.5 min-h-[220px] flex flex-col justify-center">
           <div className="flex items-center justify-between border border-white/[0.06] bg-slate-950/45 p-3 rounded-xl">
-            <span className="text-[11px] font-mono text-slate-300">Google Gemini LLM</span>
+            <span className="text-[11px] font-mono text-slate-300">Qwen via Ollama (local)</span>
             <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full">active</span>
           </div>
           <div className="flex items-center justify-between border border-white/[0.06] bg-slate-950/45 p-3 rounded-xl">
@@ -94,7 +94,7 @@ const TABS = [
         <div className="space-y-2.5 min-h-[220px] flex flex-col justify-center">
           <div className="border border-white/[0.06] bg-slate-950/45 p-3.5 rounded-xl font-mono text-[10px] leading-relaxed space-y-1">
             <div className="text-slate-600">// Vault Credentials</div>
-            <div>key: GEMINI_API_KEY</div>
+            <div>key: SMTP_PASS</div>
             <div className="text-emerald-400">resolved: ••••••••••••••• (in-memory)</div>
           </div>
           <div className="border border-white/[0.06] bg-slate-950/45 p-3.5 rounded-xl font-mono text-[10px] leading-relaxed space-y-1">

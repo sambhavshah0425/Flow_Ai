@@ -4,7 +4,7 @@ import { embedTexts, cosineSim } from '../utils/rag.js';
 /**
  * Retrieve node — embeds the query with the SAME method used to index, ranks the
  * stored chunks by cosine similarity, and outputs the top-K as `context` (ready
- * to drop into a Gemini prompt via {{retrieve.context}}) plus scored matches.
+ * to drop into a Local AI prompt via {{retrieve.context}}) plus scored matches.
  */
 export async function retrieveHandler(node, context) {
   const d = node.data || {};
@@ -19,9 +19,8 @@ export async function retrieveHandler(node, context) {
     return { context: '', matches: [], count: 0, query, note: 'No indexed content — add an Embed & Index node upstream.' };
   }
 
-  const apiKey = context.secrets?.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
   const meta = context.vectorStoreMeta || {};
-  const { vectors } = await embedTexts([query], apiKey, { forceLocal: meta.isLocal, model: meta.model });
+  const { vectors } = await embedTexts([query], meta.isLocal ? { forceLocal: true } : { model: meta.model });
   const qv = vectors[0];
 
   const ranked = store

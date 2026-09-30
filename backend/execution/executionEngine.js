@@ -174,8 +174,10 @@ export async function executeWorkflow(workflow, userId, prepared = null) {
   // (capped at this ceiling) — this is a safety net, not a replacement for it.
   const HARD_ATTEMPT_TIMEOUT_MS = 30000;
   // Local models (Ollama/Qwen) run on this machine's CPU and can legitimately
-  // take longer than a cloud API, so they get a wider ceiling.
+  // take longer than a cloud API, so they get a wider ceiling. Embed/retrieve
+  // call Ollama's embedding model; 'gemini' is the legacy alias for 'ollama'.
   const LOCAL_AI_TIMEOUT_MS = 180000;
+  const LOCAL_AI_TYPES = new Set(['ollama', 'gemini', 'embed', 'retrieve']);
 
   function runWithTimeout(promise, ms) {
     return new Promise((resolve, reject) => {
@@ -202,7 +204,7 @@ export async function executeWorkflow(workflow, userId, prepared = null) {
     const maxRetries = parseInt(node.data?.maxRetries) || 1;
     const retryDelayMs = parseInt(node.data?.retryDelayMs) || 500;
     const backoffFactor = parseFloat(node.data?.backoffFactor) || 2.0;
-    const ceilingMs = nodeType === 'ollama' ? LOCAL_AI_TIMEOUT_MS : HARD_ATTEMPT_TIMEOUT_MS;
+    const ceilingMs = LOCAL_AI_TYPES.has(nodeType) ? LOCAL_AI_TIMEOUT_MS : HARD_ATTEMPT_TIMEOUT_MS;
     const attemptTimeoutMs = Math.min(
       parseInt(node.data?.timeoutMs) || ceilingMs,
       ceilingMs
