@@ -4,11 +4,11 @@
 >
 > **How to use it (for an AI).** Read sections 1–4 for orientation, then jump to the subsystem you need. Section 12, *"How to add a new node type"*, is the most common change recipe. Section 13, *"Known issues & gotchas"*, lists traps that are not obvious from the code; read it before changing execution, variables, or the AI generator.
 >
-> Snapshot date: 2026‑09‑29. Every file in `backend/` and `frontend/src/` was read to produce this document. Backend unit tests pass at this snapshot: **6 files, 55 tests** (`cd backend && npm test`).
+> Snapshot date: 2026‑09‑29. Every file in `backend/` and `frontend/src/` was read to produce this document. Backend unit tests pass at this snapshot: **8 files, 75 tests** (`cd backend && npm test`).
 
 ---
 
-> **Update 2026-09-29: Qwen Copilot added.** There is now an 11th node type, `ollama` (Local AI via Ollama/Qwen, output `{{id.text}}`, 3-minute timeout), and a conversational copilot: `POST /api/copilot/chat` and `GET /api/copilot/status`, plus the **Chat with Qwen** panel in the builder. See [OLLAMA_QWEN_GUIDE.md](OLLAMA_QWEN_GUIDE.md) for the flow and the full file list. The sections below describe the original 10 node types.
+> **Update 2026-09-30: Gemini removed; all AI is local Qwen via Ollama.** Google Gemini (`@google/generative-ai`, `GEMINI_API_KEY`, `geminiHandler.js`, `GeminiNode.jsx`) is gone. The AI node is now `ollama` (Local AI via Ollama/Qwen, output `{{id.text}}`); embeddings use Ollama's `/api/embed`; the prompt → DAG generator calls Qwen. The old `gemini` type survives only as a **legacy alias** so saved workflows still load and run (§8.3). There is also a conversational copilot: `POST /api/copilot/chat` and `GET /api/copilot/status`, plus the **Chat with Qwen** panel in the builder. See [OLLAMA_QWEN_GUIDE.md](OLLAMA_QWEN_GUIDE.md) for the copilot flow.
 
 ## Table of contents
 
@@ -37,17 +37,17 @@
 A user:
 
 1. Signs up or logs in (JWT auth).
-2. Builds a **workflow**: a **DAG** (directed acyclic graph) of **nodes** on a drag-and-drop canvas (`@xyflow/react`). Each node is a task: static text, a Gemini AI call, an HTTP request, PDF text, an embedding or retrieval step (RAG), an IF condition, a delay, a download, or an email.
-3. Wires nodes together. Downstream nodes read upstream output with template syntax such as `{{text_1.text}}`, `{{api_1.data.title}}`, or `{{secrets.GEMINI_API_KEY}}`.
+2. Builds a **workflow**: a **DAG** (directed acyclic graph) of **nodes** on a drag-and-drop canvas (`@xyflow/react`). Each node is a task: static text, a local AI call (Qwen via Ollama), an HTTP request, PDF text, an embedding or retrieval step (RAG), an IF condition, a delay, a download, or an email.
+3. Wires nodes together. Downstream nodes read upstream output with template syntax such as `{{text_1.text}}`, `{{api_1.data.title}}`, or `{{secrets.SMTP_HOST}}`.
 4. Clicks **Run**. The backend validates the DAG, runs it level by level (independent nodes in parallel), and **streams live progress over Socket.IO** to a console in the UI.
-5. Can instead type a natural-language goal into the **AI Copilot**. The backend asks Gemini to generate the whole DAG as JSON, or falls back to a keyword-based template when there is no API key.
+5. Can instead type a natural-language goal into the **AI Copilot**. The backend asks the local Qwen model (via Ollama) to generate the whole DAG as JSON, or falls back to a keyword-based template when Ollama is unavailable or returns something unusable.
 6. Stores API keys and SMTP credentials in an **encrypted Secrets Vault** (AES-256-GCM in MongoDB). Nodes reference them as `{{secrets.KEY}}`.
 
 The public route `/` is a large marketing **landing page** with a scroll-driven **Three.js / React Three Fiber** 3D scene.
 
 **Special behaviour: in-memory mode.** If MongoDB is unreachable **and** `NODE_ENV !== 'production'`, the backend keeps running. Users, workflows, secrets, executions, and revoked tokens live in JavaScript `Map`s and `Set`s, and are lost on restart. Almost every controller has two branches, `if (isDBConnected()) {...} else {...memory...}`.
 
-**Special behaviour: no-key mode.** If there is no Gemini API key, the Gemini node returns a **mock** response, embeddings fall back to a **local hashed bag-of-words** vector, and the AI Copilot uses a **deterministic keyword pattern matcher**. The whole app therefore works without paid services.
+**Special behaviour: local AI, no API keys.** All AI runs on a local [Ollama](https://ollama.com) server (default `http://localhost:11434`) with Qwen models: `OLLAMA_MODEL` (default `qwen3:1.7b`) for text and `OLLAMA_EMBED_MODEL` (default `qwen3-embedding:0.6b`) for embeddings. There are no paid services and no API keys. There is **no mock mode** for AI text: if Ollama is not running or the model is not pulled, AI nodes fail with an actionable error (`Can't reach Ollama at … then run: ollama pull qwen3:1.7b`, or `Model "…" is not installed in Ollama. Run: ollama pull …`). Two paths still degrade gracefully without Ollama: embeddings fall back to an offline **local hashed bag-of-words** vector (`local-tfidf`), and the AI generator uses a **deterministic keyword pattern matcher**.
 
 ---
 
@@ -61,7 +61,7 @@ The public route `/` is a large marketing **landing page** with a scroll-driven 
 | Realtime | Socket.IO 4 (server) / `socket.io-client` (browser) |
 | Auth | `jsonwebtoken` (7-day tokens), `bcryptjs` (salt rounds 10) |
 | Crypto | Node `crypto`, AES-256-GCM for secrets, SHA-256 for token revocation hashes |
-| AI | `@google/generative-ai` (Gemini text + embeddings) |
+| AI | Local **Ollama** server over plain HTTP (`fetch`, no SDK): Qwen chat (`/api/chat`) + Qwen embeddings (`/api/embed`) via `utils/ollamaClient.js` |
 | Integrations | `axios` (API node), `nodemailer` (Email node), `pdf-parse` v2 (PDF upload) |
 | Backend tests | Vitest 4 |
 | Frontend | React 18, Vite 5, React Router 6 |
@@ -87,7 +87,7 @@ Flow_Ai-updated/
 │
 ├── backend/
 │   ├── package.json             # "type":"module"; scripts: start, dev (nodemon), test (vitest run)
-│   ├── .env / .env.example      # PORT, MONGODB_URI, JWT_SECRET, ENCRYPTION_KEY, GEMINI_API_KEY, CLIENT_URL, NODE_ENV
+│   ├── .env / .env.example      # PORT, MONGODB_URI, JWT_SECRET, ENCRYPTION_KEY, CLIENT_URL, OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_EMBED_MODEL, NODE_ENV
 │   ├── server.js                # Entry: loads env FIRST, creates http server, attaches Socket.IO, connects DB, listens
 │   ├── app.js                   # Express app: helmet, CORS, body limits, rate limiters, /api/health, route mounts, 404 + error handler
 │   ├── config/
@@ -106,14 +106,16 @@ Flow_Ai-updated/
 │   │   ├── workflowRoutes.js    # /api/workflows/* (+ generate-from-prompt)
 │   │   ├── executionRoutes.js   # /api/executions/*
 │   │   ├── secretRoutes.js      # /api/secrets/*
-│   │   └── uploadRoutes.js      # /api/upload/pdf
+│   │   ├── uploadRoutes.js      # /api/upload/pdf
+│   │   └── copilotRoutes.js     # /api/copilot/* (chat, status, warm-up)
 │   ├── controllers/
 │   │   ├── authController.js    # register/login/getProfile/logout + in-memory users & revoked-token Set
 │   │   ├── workflowController.js# CRUD + memoryWorkflows Map
 │   │   ├── executionController.js # runWorkflow (phase 1), list, get-by-id; wires socket → engine callbacks
 │   │   ├── secretController.js  # set/list/delete + getDecryptedUserSecrets() used by the engine
 │   │   ├── uploadController.js  # base64 PDF → pdf-parse text (8 MB limit, magic-byte check)
-│   │   └── aiWorkflowController.js # Prompt → DAG via Gemini (JSON mode) or fallback matcher; SSRF URL guard; normalizer
+│   │   ├── copilotController.js # Conversational Qwen copilot (ollamaChat + JSON schema); see OLLAMA_QWEN_GUIDE.md
+│   │   └── aiWorkflowController.js # Prompt → DAG via local Qwen (Ollama `format` JSON schema) or fallback matcher; SSRF URL guard; normalizer (gemini → ollama)
 │   ├── middlewares/
 │   │   ├── authMiddleware.js    # authenticateJWT: Bearer token, revocation check, jwt.verify, attaches req.user
 │   │   └── validationMiddleware.js # validateRegister/Login/Workflow/Secret (hand-written checks)
@@ -125,10 +127,10 @@ Flow_Ai-updated/
 │   │   ├── executionContext.js  # Per-run RAM: nodeOutputs (+aliases), secrets, variables, logs, metrics
 │   │   ├── nodeRegistry.js      # Map<type, handlerFn> plugin registry (singleton)
 │   │   ├── nodeHandlers/
-│   │   │   ├── index.js         # registerDefaultHandlers(): registers all 10 types
+│   │   │   ├── index.js         # registerDefaultHandlers(): registers all 10 types + legacy alias 'gemini' → ollamaHandler
 │   │   │   ├── textHandler.js
 │   │   │   ├── pdfHandler.js
-│   │   │   ├── geminiHandler.js # model fallback chain + per-attempt timeout + mock mode
+│   │   │   ├── ollamaHandler.js # Local AI (Qwen via Ollama); also serves legacy 'gemini' nodes
 │   │   │   ├── apiHandler.js
 │   │   │   ├── delayHandler.js
 │   │   │   ├── downloadHandler.js
@@ -138,11 +140,13 @@ Flow_Ai-updated/
 │   │   │   └── emailHandler.js  # unresolved-secret guard
 │   │   ├── utils/
 │   │   │   ├── variableResolver.js # resolveVariables() + findUnresolved()
-│   │   │   └── rag.js           # chunkText, cosineSim, localEmbed, embedTexts (Gemini → local fallback)
-│   │   └── __tests__/           # Vitest: dagParser, variableResolver, conditionHandler, emailHandler, geminiHandler
-│   ├── __tests__/aiWorkflow.test.js # Vitest: SSRF guard, fallback matcher, normalizer
+│   │   │   └── rag.js           # chunkText, cosineSim, localEmbed, embedTexts (Ollama /api/embed → local-tfidf fallback)
+│   │   └── __tests__/           # Vitest: dagParser, variableResolver, conditionHandler, emailHandler, ollamaHandler, rag
+│   ├── __tests__/aiWorkflow.test.js # Vitest: SSRF guard, fallback matcher, normalizer (incl. gemini → ollama)
+│   ├── __tests__/copilot.test.js    # Vitest: conversational copilot (see OLLAMA_QWEN_GUIDE.md)
 │   ├── utils/
 │   │   ├── encryption.js        # encryptSecret / decryptSecret (AES-256-GCM, 12-byte IV)
+│   │   ├── ollamaClient.js      # ollamaChat, ollamaEmbed, ollamaStatus, ollamaWarmup (Ollama HTTP API, actionable errors)
 │   │   └── pdfParser.js         # extractPdfText(buffer) via pdf-parse v2 PDFParse class
 │   ├── test_all_nodes.js        # Manual E2E script: runs a 10-node chain via executeWorkflow (mocked SMTP)
 │   ├── test_security.js         # Manual integration script: cross-user authz, socket auth, logout revocation (port 5199)
@@ -175,13 +179,14 @@ Flow_Ai-updated/
         │   ├── Navbar.jsx              # In-app top nav (hidden when logged out or on "/")
         │   ├── SecretsModal.jsx        # Vault CRUD UI
         │   ├── AICopilotModal.jsx      # Prompt → workflow (+ optional auto-run)
+        │   ├── CopilotChatPanel.jsx    # "Chat with Qwen" panel (Ollama online/offline + `ollama pull` hint)
         │   ├── NodeSidebar.jsx         # Palette of 10 node types (click to add)
         │   ├── NodeInspector.jsx       # Per-type config form + PDF upload + retry settings
         │   └── ExecutionConsole.jsx    # Logs / Outputs / Metrics tabs, TXT+HTML download of outputs
         ├── nodes/                      # React Flow custom node renderers
-        │   ├── nodeTypes.js            # { text, pdf, gemini, api, delay, download, condition, embed, retrieve, email }
+        │   ├── nodeTypes.js            # { text, pdf, ollama, api, delay, download, condition, embed, retrieve, email, gemini (legacy → OllamaNode) }
         │   ├── BaseNode.jsx            # Shared shell: status border/badge, handles
-        │   └── TextNode, PDFNode, GeminiNode, APINode, DelayNode, DownloadNode, ConditionNode, EmbedNode, RetrieveNode, EmailNode
+        │   └── TextNode, PDFNode, OllamaNode, APINode, DelayNode, DownloadNode, ConditionNode, EmbedNode, RetrieveNode, EmailNode
         └── landing/                    # Public marketing page (isolated styles)
             ├── LandingPage.jsx         # Section composition, Lenis smooth scroll, lazy 3D demo
             ├── landing.css             # .lp-* scoped design layer
@@ -204,6 +209,7 @@ Flow_Ai-updated/
 ### 4.1 Prerequisites
 
 - Node.js 18+
+- [Ollama](https://ollama.com) running locally, with `ollama pull qwen3:1.7b` (AI nodes, generator, copilot) and optionally `ollama pull qwen3-embedding:0.6b` (neural embeddings). Without Ollama, AI nodes fail with a "how to fix" error; embeddings and the generator still have offline fallbacks.
 - MongoDB, local or Atlas. **Optional in development**: without it the backend runs in in-memory mode.
 
 ### 4.2 Environment (`backend/.env`)
@@ -214,7 +220,9 @@ Flow_Ai-updated/
 | `MONGODB_URI` | Mongo connection string | `mongodb://127.0.0.1:27017/flowforge_db` |
 | `JWT_SECRET` | JWT signing key | Dev only: hard-coded insecure fallback plus a warning. **Throws in production.** |
 | `ENCRYPTION_KEY` | 64 hex chars (32 bytes) AES key for secrets | Dev only: `0123…cdef` fallback. **Throws in production.** |
-| `GEMINI_API_KEY` | Server-wide Gemini key. A per-user vault secret with the same name takes precedence. | none → mock or fallback modes |
+| `OLLAMA_BASE_URL` | Local Ollama server (backend-only; Ollama has no auth, never expose it publicly) | `http://localhost:11434` |
+| `OLLAMA_MODEL` | Qwen chat model for AI nodes, the generator, and the copilot (`ollama pull qwen3:1.7b`) | `qwen3:1.7b` |
+| `OLLAMA_EMBED_MODEL` | Embedding model for Embed / Retrieve (`ollama pull qwen3-embedding:0.6b`) | `qwen3-embedding:0.6b`; if unavailable, Embed falls back to offline `local-tfidf` |
 | `CLIENT_URL` | Allowed CORS / Socket.IO origin | `http://localhost:5173` |
 | `NODE_ENV` | `production` makes DB and secrets mandatory | — |
 
@@ -281,7 +289,7 @@ node test_security.js       # spins a server on :5199 and checks cross-user isol
 │        emitExecutionEvent(...) ──────────────────────────────► browser       │
 │   secretController.getDecryptedUserSecrets → context.secrets                 │
 └──────────────┬───────────────────────────────────────────────────────────────┘
-               │ Mongoose (optional)            External: Gemini API, arbitrary HTTP APIs, SMTP
+               │ Mongoose (optional)            External: local Ollama (:11434), HTTP APIs, SMTP
 ┌──────────────▼──────────┐
 │ MongoDB: users, workflows, executions, logs, secrets, revokedtokens │
 │ (or in-memory Maps when DB is down in dev)                          │
@@ -297,7 +305,7 @@ node test_security.js       # spins a server on :5199 and checks cross-user isol
 ### 6.1 Boot sequence (`server.js`)
 
 1. `import './config/loadEnv.js'` loads `.env`.
-2. `import { app } from './app.js'`. Importing routes transitively imports `executionController`, which registers the socket callbacks. Importing `executionEngine` calls `registerDefaultHandlers()`, which logs `[NodeRegistry] Registered node handler: "..."` ten times.
+2. `import { app } from './app.js'`. Importing routes transitively imports `executionController`, which registers the socket callbacks. Importing `executionEngine` calls `registerDefaultHandlers()`, which logs `[NodeRegistry] Registered node handler: "..."` eleven times (10 types + the `gemini` legacy alias).
 3. `http.createServer(app)`, then `initSocketServer(server)`.
 4. `await connectDB()`. On failure in production it calls `process.exit(1)`. In development it warns and continues in **In-Memory Mode**.
 5. `server.listen(PORT)`.
@@ -431,8 +439,8 @@ All routes except register, login, and health require `Authorization: Bearer <jw
 
 - `utils/encryption.js`: `encryptSecret(text)` uses `aes-256-gcm` with a random 12-byte IV and returns `{encryptedData, iv, tag}` (hex). `decryptSecret(...)` returns `''` on any failure, such as a wrong key or tampering.
 - The key is `Buffer.from(ENCRYPTION_KEY_HEX, 'hex')` and must be 64 hex characters.
-- `getDecryptedUserSecrets(userId)` returns a `{ KEY: plaintext }` map. The engine injects it into `ExecutionContext.secrets` at the start of every run. The AI generator also calls it to find a per-user `GEMINI_API_KEY`.
-- **Resolution order for the Gemini key**, used by the Gemini, Embed, Retrieve, and AI generator paths: `context.secrets.GEMINI_API_KEY` (user vault) → `process.env.GEMINI_API_KEY`.
+- `getDecryptedUserSecrets(userId)` returns a `{ KEY: plaintext }` map. The engine injects it into `ExecutionContext.secrets` at the start of every run. Typical vault entries are SMTP credentials (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`) and third-party API tokens, referenced as `{{secrets.SMTP_HOST}}` etc.
+- No AI path reads secrets: local Ollama needs no API key, and `GEMINI_API_KEY` is no longer used anywhere.
 
 ### 6.8 PDF upload (`uploadController.js` + `utils/pdfParser.js`)
 
@@ -493,7 +501,7 @@ socket 'start_execution'(id)  → authorize → startPendingExecution(id)
 | `maxRetries` | **1** | **Total attempts**, not extra retries. `1` means a single try. |
 | `retryDelayMs` | 500 | Delay before attempt 2. |
 | `backoffFactor` | 2.0 | Delay for attempt *n* = `retryDelayMs × backoff^(n-2)`. |
-| `timeoutMs` | 30000 | Per-attempt timeout, **capped at 30 000 ms** (`HARD_ATTEMPT_TIMEOUT_MS`). |
+| `timeoutMs` | 30000 / 180000 | Per-attempt timeout, **capped** at a per-type ceiling: **180 000 ms** (`LOCAL_AI_TIMEOUT_MS`) for `ollama`, `gemini` (legacy alias), `embed`, and `retrieve` (the `LOCAL_AI_TYPES` set, since local CPU models are slow), and **30 000 ms** (`HARD_ATTEMPT_TIMEOUT_MS`) for every other type. `timeoutMs` can lower the ceiling but never raise it. |
 
 Flow: emit `node.started` → loop attempts. For each attempt: `handler = nodeRegistry.getHandler(type)`, then `await runWithTimeout(handler(node, context), ms)`. On success it calls `context.setNodeOutput(...)`, increments `metrics.nodesExecuted`, records `takenBranch[nodeId] = output.branch` if present, persists a success `Log`, and emits `node.completed`. On final failure it persists an error `Log` and emits `node.failed`. It never throws. It returns `{nodeId, success, error?}`.
 
@@ -525,11 +533,11 @@ The node `type` is lower-cased; a missing type defaults to `'text'`. An unknown 
 
 **Output aliasing.** `setNodeOutput(nodeId, nodeType, nodeLabel, output)` stores the same output under **three keys**:
 
-1. `nodeId`, e.g. `gemini_1`
-2. the slugified label: `label.toLowerCase().replace(/[^a-z0-9]/g,'_')`, so `"Gemini AI"` → `gemini_ai`
-3. the node type, e.g. `gemini`
+1. `nodeId`, e.g. `ollama_1`
+2. the slugified label: `label.toLowerCase().replace(/[^a-z0-9]/g,'_')`, so `"Local AI (Qwen)"` → `local_ai__qwen_`
+3. the node type, e.g. `ollama`
 
-So `{{gemini_1.text}}`, `{{gemini_ai.text}}`, and `{{gemini.text}}` can all resolve to the same value. When several nodes share a type or label, **the last one to finish wins** the alias. With parallel levels that order is nondeterministic, so prefer node IDs.
+So `{{ollama_1.text}}`, `{{local_ai__qwen_.text}}`, and `{{ollama.text}}` can all resolve to the same value. When several nodes share a type or label, **the last one to finish wins** the alias. With parallel levels that order is nondeterministic, so prefer node IDs.
 
 ### 7.6 Variable resolution (`utils/variableResolver.js`)
 
@@ -551,7 +559,7 @@ Rules:
 
 ### 7.7 Node registry (`nodeRegistry.js`)
 
-A singleton `NodeRegistry` holds a `Map<lowercaseType, async (node, context) => output>`, with `register(type, fn)`, `getHandler(type)` (throws if missing), and `getRegisteredTypes()`. `nodeHandlers/index.js#registerDefaultHandlers()` registers all 10 types when `executionEngine.js` is imported.
+A singleton `NodeRegistry` holds a `Map<lowercaseType, async (node, context) => output>`, with `register(type, fn)`, `getHandler(type)` (throws if missing), and `getRegisteredTypes()`. `nodeHandlers/index.js#registerDefaultHandlers()` registers all 10 types when `executionEngine.js` is imported, plus the legacy alias `gemini` → `ollamaHandler` (11 registrations).
 
 ### 7.8 Persistence summary
 
@@ -579,16 +587,15 @@ Every node has the React Flow shape `{ id, type, position:{x,y}, data:{ label, .
 - **output**: `{ text, fileName, pageCount, charCount, extractedAt }`
 - The handler does **not** parse PDFs. Parsing happens only at upload time.
 
-### 8.3 `gemini`: Gemini AI
-- **data**: `prompt` or `template` (resolved; default `'Summarize the input data.'`), `model` (default `gemini-flash-latest`), `temperature` (default 0.7), `geminiTimeoutMs` (optional per-attempt timeout).
-- **Key**: vault `GEMINI_API_KEY`, then env.
-- **No key → mock**: returns a canned text beginning `[Gemini AI Response (Mock Mode - ...)]`, with `isMock:true` and `tokensUsed:150`.
-- **With key**: tries `[selectedModel, ...FALLBACK_MODELS]`, where `FALLBACK_MODELS = ['gemini-flash-latest', 'gemini-3.1-flash-lite']`, de-duplicated.
-  - Per-attempt timeout = `min(geminiTimeoutMs || 11000, floor(28000 / chainLength))`, so the whole chain fits inside the engine's 30 s node timeout.
-  - It moves to the next model only for "fallbackable" errors (message contains 503, overloaded, 429, quota, rate limit, 500, 404, not found, network, fetch failed, ETIMEDOUT, ECONNRESET, did not respond, …). A 400, 401, or 403 fails immediately.
-  - It logs `Calling model "X"` before each call and a warning on fallback.
-- **output**: `{ text, model (actual), requestedModel, fallbackUsed, triedModels, prompt, isMock:false, tokensUsed }`. Tokens are estimated as `ceil((prompt.length + text.length) / 4)` and added to `metrics.tokensUsed`.
-- **Inspector model options**: `gemini-flash-latest`, `gemini-3.1-flash-lite`, `gemini-3.5-flash`.
+### 8.3 `ollama`: Local AI (Qwen), plus the legacy `gemini` alias
+- **Handler**: `nodeHandlers/ollamaHandler.js` → `utils/ollamaClient.js#ollamaChat` (`POST {OLLAMA_BASE_URL}/api/chat`, `stream:false`, `think:false` to skip Qwen3's slow thinking mode, `keep_alive:'30m'`, `num_ctx 8192`). Any `<think>…</think>` block in the reply is stripped.
+- **data**: `prompt` or `template` (resolved; **required**: an empty prompt throws `Local AI node: the prompt is empty.`), `system` (optional, resolved; sent as a system message), `model` (default `OLLAMA_MODEL`, i.e. `qwen3:1.7b`), `temperature` (default 0.7).
+- **Timeout**: the engine ceiling for this type is 180 s (§7.3). It logs `Generating with <model> (local, may take a moment)…` before the call.
+- **No mock mode.** Failures throw actionable errors: Ollama unreachable → `Can't reach Ollama at <url>. Make sure Ollama is installed and running (https://ollama.com), then run: ollama pull <model>`; model missing (404) → `Model "<model>" is not installed in Ollama. Run: ollama pull <model>`; timeout → `Ollama model "<model>" did not respond within Ns.`
+- **output**: `{ text, model, prompt, tokensUsed, isLocal:true }`. `tokensUsed` is the **exact** count Ollama reports (`prompt_eval_count + eval_count`) and is added to `metrics.tokensUsed`.
+- **Inspector model options**: `qwen3:1.7b` (fast, recommended), `qwen3:4b`, `qwen3:8b`, with an `ollama pull <model>` hint. The prompt textarea and temperature slider are also shown.
+- **Canvas**: `OllamaNode`, teal, `Bot` icon, title "Local AI (Qwen)", shows the model and prompt. Palette entry: "Local AI (Qwen)".
+- **Legacy `gemini` alias.** Google Gemini was removed (`geminiHandler.js`, `GeminiNode.jsx`, and the `@google/generative-ai` dependency are deleted; `GEMINI_API_KEY` is not read anywhere). So that workflows saved earlier keep working, type `gemini` is still accepted: the backend registers it to `ollamaHandler`, the frontend renders it with `OllamaNode` and the Ollama inspector panel, and any `model` beginning with `gemini` is ignored in favour of the default Qwen model (`OLLAMA_MODEL`). The AI normalizer rewrites type `gemini` → `ollama` and drops gemini model names. `gemini` is **not** in the node palette, and new workflows should use `ollama`.
 
 ### 8.4 `api`: REST API
 - **data**: `url` (resolved; default `https://jsonplaceholder.typicode.com/posts/1`), `method` (default GET), `body` (string or object; resolved; JSON-parsed if possible; sent only for POST/PUT/PATCH), `headers` (object; default `{Content-Type: application/json}`; **not resolved**), `timeoutMs` (axios timeout, default 10000).
@@ -608,21 +615,21 @@ Every node has the React Flow shape `{ id, type, position:{x,y}, data:{ label, .
 - A delay over ~30 s will hit the engine's hard timeout.
 
 ### 8.7 `download`: Download File
-- **data**: `text` or `content` (resolved; default `'{{gemini.text}}'`), `fileName` (default `result.txt`)
+- **data**: `text` or `content` (resolved; default `'{{ollama.text}}'`), `fileName` (default `result.txt`)
 - **output**: `{ downloadUrl: 'data:text/plain;charset=utf-8,<encoded>', fileName, content, sizeBytes }`
 - Nothing downloads automatically. The **Outputs** tab of `ExecutionConsole` shows **TXT** (markdown stripped to plain text) and **HTML** (markdown rendered into a styled HTML document) buttons for any output with a `fileName`.
 
 ### 8.8 `embed`: Embed & Index
 - **data**: `text` or `content` (resolved; default `'{{pdf.text}}'`), `chunkSize` (default 900), `overlap` (default 150, clamped to ≤ 30% of `chunkSize`)
-- **Process**: `chunkText` packs paragraphs up to `chunkSize` with tail overlap and hard-splits oversized chunks. It keeps at most **60 chunks** and logs a warning when it caps. `embedTexts` tries Gemini models `gemini-embedding-001`, `gemini-embedding-2`, and `gemini-embedding-2-preview` (one `embedContent` call per chunk), then falls back to **`localEmbed`**: a 512-dimension hashed term-frequency vector with stopwords removed and L2 normalisation.
+- **Process**: `chunkText` packs paragraphs up to `chunkSize` with tail overlap and hard-splits oversized chunks. It keeps at most **60 chunks** and logs a warning when it caps. `embedTexts` embeds all chunks in **one batched** `POST {OLLAMA_BASE_URL}/api/embed` call with `OLLAMA_EMBED_MODEL` (default `qwen3-embedding:0.6b`). If Ollama is unreachable or the model is not pulled, it falls back to **`localEmbed`** (model name `local-tfidf`): a 512-dimension hashed term-frequency vector with stopwords removed and L2 normalisation. The Embed node then logs a **warn**: `Ollama embedding model unavailable — used the offline keyword embedding instead.` Engine timeout ceiling: 180 s.
 - **Side effect**: pushes `{text, vector}` into `context.vectorStore` and sets `context.vectorStoreMeta = {model, isLocal}`. The store lives **only for that run**.
 - **output**: `{ chunks (count), model, isLocal, indexedChars, capped }`
 
 ### 8.9 `retrieve`: Retrieve (semantic search)
 - **data**: `query` (resolved), `topK` (default 4)
-- Embeds the query **in the same space** as the indexed chunks (`forceLocal: meta.isLocal`, same model), ranks by cosine similarity, and takes the top K.
+- Embeds the query **in the same space** as the indexed chunks, ranks by cosine similarity, and takes the top K. If the chunks used `local-tfidf`, the query uses it too (`forceLocal`, no Ollama call). If the chunks used an Ollama model, the query is embedded with **that same model** and the offline fallback is disabled: if Ollama fails at retrieve time the node **throws** rather than mixing embedding spaces. Engine timeout ceiling: 180 s.
 - **output**: `{ query, context (top chunks joined by '\n\n---\n\n'), matches:[{score, preview}], count, fromChunks }`. With an empty query or empty store it returns `context:''` plus a `note`.
-- Use it as **`{{retrieve_1.context}}`** in a Gemini prompt. There is **no `.text` field**; see §13.
+- Use it as **`{{retrieve_1.context}}`** in a Local AI (`ollama`) prompt. There is **no `.text` field**.
 
 ### 8.10 `email`: Send Email
 - **data**: `to`, `subject` (default `(no subject)`), `body` or `text`, `isHtml`, `smtpHost`, `smtpPort` (default 587), `smtpUser`, `smtpPass`, `from` (default = user). All fields are resolved. The defaults from `addNode` and the AI generator use `{{secrets.SMTP_HOST}}`, `{{secrets.SMTP_USER}}`, and `{{secrets.SMTP_PASS}}`.
@@ -637,20 +644,19 @@ Every node has the React Flow shape `{ id, type, position:{x,y}, data:{ label, .
 File: `backend/controllers/aiWorkflowController.js`. Route: `POST /api/workflows/generate-from-prompt`.
 
 1. Validate that `prompt` is a non-empty string.
-2. Look up a Gemini key (user vault, then env).
-3. **With a key**: call `gemini-flash-latest` with `responseMimeType: 'application/json'`, `temperature 0.2`, and `systemInstruction = SYSTEM_PROMPT`. The system prompt describes all 10 node schemas, the `{{id.field}}` rules, horizontal layout coordinates, and the strict JSON output schema. The user goal is wrapped in `<user_goal>…</user_goal>`. The call races a **6-second timeout**. On **any** error (timeout, bad JSON, validation) it falls back.
-4. **Without a key, or after an error**: `generateFallbackWorkflow(prompt)` does keyword matching, checked in this order:
+2. **Call local Qwen**: `ollamaChat` with `OLLAMA_MODEL` (default `qwen3:1.7b`), messages `[system: SYSTEM_PROMPT, user: <user_goal>…</user_goal>]`, a JSON schema (`WORKFLOW_SCHEMA`) passed as Ollama's **`format`** option so the reply must be structured JSON, `temperature 0.2`, and a **120-second timeout** (`GENERATION_TIMEOUT_MS`). The system prompt describes all 10 node schemas (the AI node is `ollama`; retrieve outputs are documented as `{{id.context}}` / `{{id.matches}}`), the `{{id.field}}` rules, horizontal layout coordinates, and the strict JSON output schema. The reply is `JSON.parse`d and normalized. On **any** error (Ollama offline, model not pulled, timeout, bad JSON, validation) it falls back. No API key or vault secret is involved.
+3. **Fallback**: `generateFallbackWorkflow(prompt)` does keyword matching, checked in this order:
    1. `email|alert|notify|condition|check` → **Alert router**: `api_1` → `condition_1` (`{{api_1.status}} equals 200`) → true: `email_1`, false: `delay_1`
-   2. `pdf|document|doc|rag|embed|search` → **RAG**: `pdf_1` → `embed_1` → `retrieve_1` → `gemini_1` → `download_1`
-   3. `api|fetch|url|http|summarize` → **API summariser**: `api_1` → `gemini_1` → `download_1`
-   4. otherwise → **Default**: `text_1` (the prompt) → `gemini_1` → `download_1`
-5. `normalizeAndValidateWorkflow(raw)` runs in four phases:
+   2. `pdf|document|doc|rag|embed|search` → **RAG**: `pdf_1` → `embed_1` → `retrieve_1` → `ollama_1` (prompt uses `{{retrieve_1.context}}`) → `download_1` (`{{ollama_1.text}}`)
+   3. `api|fetch|url|http|summarize` → **API summariser**: `api_1` → `ollama_1` → `download_1`
+   4. otherwise → **Default**: `text_1` (the prompt) → `ollama_1` → `download_1`
+4. `normalizeAndValidateWorkflow(raw)` runs on both paths, in four phases:
    - Name trimmed to 80 characters, description to 300.
-   - **Nodes**: ids lower-cased with non-`[a-z0-9_]` replaced by `_`. Unknown types become `text`. Missing positions become `x = 100 + idx*350, y = 150`. Missing labels become `"<TYPE> Node"`. Per-type defaults: api → `sanitizeAndValidateUrl` and uppercase method; gemini → default model and prompt; condition → operator and operands; download → fileName and text; email → SMTP secret placeholders.
+   - **Nodes**: ids lower-cased with non-`[a-z0-9_]` replaced by `_`. Type `gemini` (legacy) is converted to `ollama`; other unknown types become `text`. Missing positions become `x = 100 + idx*350, y = 150`. Missing labels become `"<TYPE> Node"`. Per-type defaults: api → `sanitizeAndValidateUrl` and uppercase method; ollama → default prompt, and any `gemini*` model name is deleted (so the Qwen default applies); condition → operator and operands; download → fileName and text; email → SMTP secret placeholders.
    - **Edges**: kept only if both endpoints exist and are distinct. Duplicate `source->target` pairs are dropped. Edges leaving a condition get `sourceHandle` (default `'true'`) and a colour style.
    - If there are no edges but there are several nodes, it **auto-chains them linearly**.
    - Finally it runs `parseDAG` (throws on a cycle) and returns `{name, description, nodes, edges, orderedNodes}`.
-6. Response: `{ success, workflow, autoRun, mode }`. `mode` is `live_ai` whenever a key existed, **even if the fallback was actually used**.
+5. Response: `{ success, workflow, autoRun, mode }`. `mode` is `'live_ai'` **only when Qwen actually produced the workflow**, and `'fallback_matcher'` whenever the keyword fallback was used.
 
 **`sanitizeAndValidateUrl` (SSRF guard)**: `{{...}}` template URLs are allowed through. Non-http(s) or unparsable URLs are replaced with the jsonplaceholder URL. Hosts matching localhost, 127.*, 0.0.0.0, 10.*, 192.168.*, 172.16–31.*, 169.254.*, ::1, or fe80:: are replaced the same way. **This guard runs only in the generator, not in `apiHandler`.**
 
@@ -696,14 +702,14 @@ File: `backend/controllers/aiWorkflowController.js`. Route: `POST /api/workflows
 | `workflows` | list from the API |
 | `currentWorkflowId` | `null` means an unsaved canvas, so the next save uses POST |
 | `workflowName` | edited inline in the builder via `useWorkflowStore.setState` |
-| `nodes, edges` | React Flow arrays; the default canvas is `text_1 → gemini_1 → download_1` |
+| `nodes, edges` | React Flow arrays; the default canvas is `text_1 → ollama_1` (label "Local AI (Qwen)", model `qwen3:1.7b`, prompt `{{text_1.text}}`) `→ download_1` (text `{{ollama_1.text}}`) |
 | `selectedNodeId` | drives `NodeInspector` |
 | `isSaving, isGeneratingWorkflow, generationError, loadingWorkflows, error` | |
 
 Actions:
 
 - `setNodes`, `setEdges`, `onNodesChange` and `onEdgesChange` (use `applyNodeChanges` and `applyEdgeChanges`), `setSelectedNodeId`, `updateNodeData(id, partial)`.
-- `addNode(type, position={250,250})`: the id is `${type}_${last 4 digits of Date.now()}`. It seeds per-type default data (see `§8`) and selects the new node.
+- `addNode(type, position={250,250})`: the id is `${type}_${last 4 digits of Date.now()}`. It seeds per-type default data (see `§8`; e.g. ollama → prompt `Summarize: {{text_1.text}}`, model `qwen3:1.7b`, temperature 0.7; email body `{{ollama.text}}`) and selects the new node.
 - `deleteNode(id)`: also removes edges touching the node.
 - `fetchWorkflows()`, `loadWorkflow(wf)`, `saveWorkflow()` (PUT if `currentWorkflowId`, else POST, then stores `_id`), `resetCanvas()`.
 - `generateWorkflowFromPrompt(prompt, autoRun)`: replaces the canvas with the generated DAG and sets `currentWorkflowId = null`.
@@ -743,7 +749,7 @@ Actions:
 - **Navbar**: renders only when authenticated. It shows the logo, Dashboard and Workflow Studio links, the Secrets Vault button, the user name and email, and logout.
 - **SecretsModal**: loads `/secrets` when opened. The form upper-cases the key and uses a password-type value input. It lists key names with delete buttons; values are never shown.
 - **AICopilotModal**: a prompt textarea, 4 preset prompts (API Summarizer, Document Vector RAG, Conditional Alert Pipeline, Autonomous AI Writer), **Generate Workflow**, and **⚡ Generate & Auto-Run**. Auto-run calls `runCurrentWorkflow` with the generated nodes and edges immediately. `onWorkflowReady` lets the Dashboard navigate to `/builder`.
-- **NodeSidebar**: a static `NODE_PALETTE` of 10 entries. Clicking one calls `addNode(type)`. Drag-and-drop from the palette is **not** implemented; nodes are added by click at (250, 250).
+- **NodeSidebar**: a static `NODE_PALETTE` of 10 entries (the AI entry is **Local AI (Qwen)**, type `ollama`; `gemini` is not listed). Clicking one calls `addNode(type)`. Drag-and-drop from the palette is **not** implemented; nodes are added by click at (250, 250).
 - **NodeInspector**: when nothing is selected, it shows a placeholder. Otherwise it shows the node id (read-only), a label field, per-type fields, and a shared **"Exponential Retry Backoff"** section (`maxRetries` 1–5 and `retryDelayMs`). The PDF upload control enforces 8 MB and PDF MIME type client-side.
 
   Fields exposed per type:
@@ -751,7 +757,7 @@ Actions:
   |---|---|
   | text | text |
   | pdf | upload + editable extracted text |
-  | gemini | model select, prompt, temperature slider |
+  | ollama (and legacy gemini) | local model select (qwen3:1.7b / 4b / 8b, gemini names shown as the Qwen default) + `ollama pull` hint, prompt, temperature slider |
   | api | method, url |
   | email | to, subject, body, isHtml, SMTP host/port/user/pass |
   | embed | text, chunkSize |
@@ -781,7 +787,7 @@ Each `XNode.jsx` is a thin preview wrapper:
 | component | preview |
 |---|---|
 | APINode | method badge + URL |
-| GeminiNode | model + prompt (display default model `gemini-3.1-flash-lite`) |
+| OllamaNode | model + prompt + "local · free" tag (display default `qwen3:1.7b`; gemini model names shown as the default). Also renders legacy `gemini` nodes. |
 | PDFNode | filename, page count, first 90 characters |
 | ConditionNode | `left op right` + True/False legend |
 | EmbedNode | `index: <text>` |
@@ -791,7 +797,7 @@ Each `XNode.jsx` is a thin preview wrapper:
 | DownloadNode | `💾 filename` |
 | TextNode | text |
 
-`nodeTypes.js` maps type strings to components. **The keys must match the backend registry types.**
+`nodeTypes.js` maps type strings to components, including `gemini: OllamaNode` for legacy workflows. **The keys must match the backend registry types.**
 
 ### 10.7 Styling system
 
@@ -853,15 +859,15 @@ Each `XNode.jsx` is a thin preview wrapper:
 pdf_1 (upload a PDF in the Inspector; data.text now holds the extracted text)
   → embed_1   data.text  = "{{pdf_1.text}}"
   → retrieve_1 data.query = "What are the payment terms?"
-  → gemini_1  data.prompt = "Answer using only this context:\n{{retrieve_1.context}}\n\nQ: What are the payment terms?"
-  → download_1 data.text  = "{{gemini_1.text}}", fileName "answer.txt"
+  → ollama_1  data.prompt = "Answer using only this context:\n{{retrieve_1.context}}\n\nQ: What are the payment terms?"
+  → download_1 data.text  = "{{ollama_1.text}}", fileName "answer.txt"
 ```
 
 ### 11.5 Secrets
 
-- Navbar → **Secrets Vault** → add `GEMINI_API_KEY`, `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, and so on.
+- Navbar → **Secrets Vault** → add `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, third-party API tokens, and so on.
 - Values are encrypted at rest. At run time they are decrypted into `context.secrets`. Nodes reference them as `{{secrets.NAME}}`.
-- A vault `GEMINI_API_KEY` is picked up automatically by the Gemini, Embed, Retrieve, and Copilot paths; no template is needed.
+- Secrets are only used where a node references them, e.g. the Email node's default `smtpHost: "{{secrets.SMTP_HOST}}"`. The AI paths (Local AI, Embed, Retrieve, generator, copilot) need no key.
 
 ### 11.6 Example workflow JSON (the shape the API stores and executes)
 
@@ -871,19 +877,19 @@ pdf_1 (upload a PDF in the Inspector; data.text now holds the extracted text)
   "nodes": [
     { "id": "api_1", "type": "api", "position": { "x": 100, "y": 150 },
       "data": { "label": "Fetch post", "url": "https://jsonplaceholder.typicode.com/posts/1", "method": "GET" } },
-    { "id": "gemini_1", "type": "gemini", "position": { "x": 450, "y": 150 },
-      "data": { "label": "Summarize", "prompt": "Summarize: {{api_1.data.body}}", "model": "gemini-flash-latest", "temperature": 0.5, "maxRetries": 2 } },
+    { "id": "ollama_1", "type": "ollama", "position": { "x": 450, "y": 150 },
+      "data": { "label": "Summarize", "prompt": "Summarize: {{api_1.data.body}}", "model": "qwen3:1.7b", "temperature": 0.5, "maxRetries": 2 } },
     { "id": "cond_1", "type": "condition", "position": { "x": 800, "y": 150 },
-      "data": { "label": "Long?", "leftValue": "{{gemini_1.text}}", "operator": "contains", "rightValue": "important" } },
+      "data": { "label": "Long?", "leftValue": "{{ollama_1.text}}", "operator": "contains", "rightValue": "important" } },
     { "id": "email_1", "type": "email", "position": { "x": 1150, "y": 50 },
-      "data": { "label": "Alert", "to": "me@example.com", "subject": "Important post", "body": "{{gemini_1.text}}",
+      "data": { "label": "Alert", "to": "me@example.com", "subject": "Important post", "body": "{{ollama_1.text}}",
                 "smtpHost": "{{secrets.SMTP_HOST}}", "smtpPort": 465, "smtpUser": "{{secrets.SMTP_USER}}", "smtpPass": "{{secrets.SMTP_PASS}}" } },
     { "id": "download_1", "type": "download", "position": { "x": 1150, "y": 250 },
-      "data": { "label": "Save", "fileName": "summary.txt", "text": "{{gemini_1.text}}" } }
+      "data": { "label": "Save", "fileName": "summary.txt", "text": "{{ollama_1.text}}" } }
   ],
   "edges": [
-    { "id": "e1", "source": "api_1", "target": "gemini_1", "type": "smoothstep", "animated": true },
-    { "id": "e2", "source": "gemini_1", "target": "cond_1", "type": "smoothstep", "animated": true },
+    { "id": "e1", "source": "api_1", "target": "ollama_1", "type": "smoothstep", "animated": true },
+    { "id": "e2", "source": "ollama_1", "target": "cond_1", "type": "smoothstep", "animated": true },
     { "id": "e3", "source": "cond_1", "sourceHandle": "true",  "target": "email_1",    "type": "smoothstep", "animated": true },
     { "id": "e4", "source": "cond_1", "sourceHandle": "false", "target": "download_1", "type": "smoothstep", "animated": true }
   ]
@@ -908,7 +914,7 @@ Say the new type is `slack`.
    ```
    - Resolve every user-facing string field with `resolveVariables`.
    - For credentials, use `findUnresolved` to produce clear errors.
-   - Keep each call well under 30 s (the engine's hard cap per attempt).
+   - Keep each call well under 30 s (the engine's hard cap per attempt; only the `LOCAL_AI_TYPES` in `executionEngine.js` get 180 s).
    - Add token estimates to `context.metrics.tokensUsed` if relevant. Use `context.addLog(node.id, type, level, msg)` for extra log lines.
    - To make it a **branching** node, return `branch: '<handleId>'` and give edges matching `sourceHandle` values.
 2. **Register it**: add `nodeRegistry.register('slack', slackHandler)` in `nodeHandlers/index.js`.
@@ -917,7 +923,7 @@ Say the new type is `slack`.
 5. **Palette**: add an entry to `NODE_PALETTE` in `components/NodeSidebar.jsx`.
 6. **Defaults**: add `...(nodeType === 'slack' && {...})` in `useWorkflowStore.addNode`.
 7. **Inspector form**: add a `{type === 'slack' && (...)}` block in `components/NodeInspector.jsx`.
-8. **Tests**: add `backend/execution/__tests__/slackHandler.test.js` (Vitest; mock external SDKs with `vi.mock`, as in `emailHandler.test.js` and `geminiHandler.test.js`).
+8. **Tests**: add `backend/execution/__tests__/slackHandler.test.js` (Vitest; mock external SDKs with `vi.mock`, as in `emailHandler.test.js`; stub `fetch` with `vi.stubGlobal` as in `ollamaHandler.test.js` and `rag.test.js`).
 9. Optionally update the landing `systemData.js`, `NodeShowcaseSection`, and the Dashboard "Plugin Handlers" count.
 
 ---
@@ -929,46 +935,48 @@ These come from reading the code at this snapshot. Bug #1 was partly verified by
 ### Bugs
 
 1. **Runs from the builder likely never start when MongoDB is connected.** The builder always posts ad-hoc `workflowData` with no `_id`. `prepareExecution` therefore uses `workflowId = 'wf_<timestamp>'`. `Execution.workflowId` is a required ObjectId, so `Execution.create` fails with a `CastError` (verified with `validateSync`). The `catch` sets `executionId = 'exec_<ts>'` but **does not add it to `memoryExecutions`**. Next, `authorizeExecutionUser` (DB branch) calls `Execution.findById('exec_...')`, which fails casting and returns `false`. `join_execution` and `start_execution` both emit `error`, and the frontend does not listen for `error`, so the UI stays on "Executing…". In-memory mode works fine. Possible fixes: send `workflowId` for saved workflows; make `Execution.workflowId` optional or a String; always store fallback records in `memoryExecutions`; and let `authorizeExecutionUser` also check `pendingExecutions` when the DB is connected.
-2. **The RAG fallback template references a field that does not exist.** `generateFallbackWorkflow` wires the Gemini prompt with `{{retrieve_1.text}}`, and `SYSTEM_PROMPT` documents the retrieve outputs as `.text` and `.results`. The handler actually returns **`context`** and **`matches`**, so the placeholder stays literal. It should be `{{retrieve_1.context}}`.
-3. **Logout does not revoke the token.** `Navbar` calls `useAuthStore.logout()`, which only clears localStorage. `POST /api/auth/logout` exists but is never called, so the JWT stays valid until it expires (7 days).
-4. **No UI handling of socket `error` or `workflow.started`.** Authorization failures leave `isExecuting = true` forever.
-5. **The AI normalizer lower-cases node IDs but not `{{Id.field}}` references inside `data`.** If Gemini emits mixed-case IDs, the templates break.
-6. **`mode: 'live_ai'` is returned whenever a key exists**, even when the fallback matcher was actually used.
+2. **Logout does not revoke the token.** `Navbar` calls `useAuthStore.logout()`, which only clears localStorage. `POST /api/auth/logout` exists but is never called, so the JWT stays valid until it expires (7 days).
+3. **No UI handling of socket `error` or `workflow.started`.** Authorization failures leave `isExecuting = true` forever.
+4. **The AI normalizer lower-cases node IDs but not `{{Id.field}}` references inside `data`.** If Qwen emits mixed-case IDs, the templates break.
+
+**Fixed since the previous snapshot** (removed from this list): the RAG fallback template now uses `{{retrieve_1.context}}` and `SYSTEM_PROMPT` documents retrieve outputs as `.context` / `.matches`; the generator's `mode` is now `'live_ai'` only when Qwen actually produced the workflow; and the old Gemini node default-model mismatch no longer exists (Gemini was removed, §8.3).
 
 ### Security
 
-7. **SSRF protection applies only to AI-generated API URLs.** A user-built API node can call `http://localhost`, `169.254.169.254`, and similar addresses from the server.
-8. The dev fallback `JWT_SECRET` and `ENCRYPTION_KEY` are public in the repo. They are allowed only when `NODE_ENV !== 'production'`.
-9. The auth rate limit is 5 requests per 15 minutes per IP for register and login combined, which is easy to exhaust while testing.
+5. **SSRF protection applies only to AI-generated API URLs.** A user-built API node can call `http://localhost`, `169.254.169.254`, and similar addresses from the server.
+6. The dev fallback `JWT_SECRET` and `ENCRYPTION_KEY` are public in the repo. They are allowed only when `NODE_ENV !== 'production'`.
+7. The auth rate limit is 5 requests per 15 minutes per IP for register and login combined, which is easy to exhaust while testing.
+8. **Ollama has no authentication.** It must stay reachable only by the backend (`OLLAMA_BASE_URL`, default `localhost:11434`) and never be exposed publicly.
 
 ### Behavioural gotchas
 
-10. **`maxRetries` means total attempts** (default 1, i.e. no retry). The Inspector labels it "Max Retries", and its `retryDelayMs` displays a default of 1000 while the engine's default is 500.
-11. **The alias keys** (label slug and type) collide across nodes of the same type; the last finisher wins. Defaults such as `{{gemini.text}}` (download and email) and `{{pdf.text}}` (embed) rely on these aliases.
-12. `{{variables.*}}` is supported by the resolver but **nothing populates `context.variables`**.
-13. **Unresolved `{{...}}` are left verbatim** and are not errors, except in the Email node.
-14. **The vector store is per-execution.** Embed and Retrieve must be in the same run, with Embed upstream of Retrieve.
-15. The engine's 30 s hard per-attempt timeout applies to Delay nodes too.
-16. **API node `headers` are not variable-resolved**, and the Inspector cannot edit `body` or `headers`.
-17. The `pdf` handler never parses a PDF; it returns `data.text`. Without an upload it emits placeholder sample text.
-18. Frontend node IDs use the last 4 digits of `Date.now()`, so collisions are possible, though unlikely.
-19. `GeminiNode` displays a default model of `gemini-3.1-flash-lite`, while the handler and Inspector default to `gemini-flash-latest`.
+9. **`maxRetries` means total attempts** (default 1, i.e. no retry). The Inspector labels it "Max Retries", and its `retryDelayMs` displays a default of 1000 while the engine's default is 500.
+10. **The alias keys** (label slug and type) collide across nodes of the same type; the last finisher wins. Defaults such as `{{ollama.text}}` (download and email) and `{{pdf.text}}` (embed) rely on these aliases.
+11. `{{variables.*}}` is supported by the resolver but **nothing populates `context.variables`**.
+12. **Unresolved `{{...}}` are left verbatim** and are not errors, except in the Email node.
+13. **The vector store is per-execution.** Embed and Retrieve must be in the same run, with Embed upstream of Retrieve.
+14. The engine's 30 s hard per-attempt timeout applies to Delay nodes too. Only `ollama`, `gemini` (legacy alias), `embed`, and `retrieve` get the 180 s ceiling.
+15. **API node `headers` are not variable-resolved**, and the Inspector cannot edit `body` or `headers`.
+16. The `pdf` handler never parses a PDF; it returns `data.text`. Without an upload it emits placeholder sample text.
+17. Frontend node IDs use the last 4 digits of `Date.now()`, so collisions are possible, though unlikely.
+18. **No AI mock mode.** Without a running Ollama and a pulled `OLLAMA_MODEL`, every Local AI node fails (with a "how to fix" message). Embed silently degrades to `local-tfidf` (with a warn log), and the generator to the keyword matcher. Local CPU generation can take tens of seconds.
+19. **Embedding-space lock-in.** If Embed used an Ollama model and Ollama becomes unavailable before Retrieve runs, Retrieve throws instead of falling back, because a `local-tfidf` query cannot be compared with neural chunk vectors.
 20. There is no global 401 interceptor on the frontend. An expired token is only cleared by `checkAuth` on app load.
 
 ### Stale or cosmetic
 
-21. The Dashboard stats "99.8% reliability" and "6 plugin handlers" are hard-coded; the real handler count is 10.
-22. The README lists condition operators as `==, !=, >, <`; the real operator names are listed in §8.5. The README also says "Gemini Pro" and describes the Download node as a "file stream".
+21. The Dashboard stats "99.8% reliability" and "6 plugin handlers" are hard-coded; the real handler count is 10 (plus the `gemini` legacy alias).
+22. The README lists condition operators as `==, !=, >, <`; the real operator names are listed in §8.5. The README also describes the Download node as a "file stream".
 23. `index.html` references `/favicon.svg`, which does not exist in `public/`.
 24. `Workflow.isPublished`, `Execution.status: 'cancelled'`, and `metrics.memoryMB` are never used.
 25. There are unused imports in `DashboardPage` (`Play`, `Trash2`, `Wand2`) and `NodeInspector` (`HelpCircle`, `Layers`).
-26. The project folder is currently **not a git repository**. `frontend/dist/` holds a stale build.
+26. `frontend/dist/` holds a stale build.
 
 ---
 
 ## 14. Testing
 
-**Automated (Vitest)**: `cd backend && npm test`. At this snapshot: 6 files, 55 tests, all passing.
+**Automated (Vitest)**: `cd backend && npm test`. At this snapshot: 8 files, 75 tests, all passing.
 
 | File | Covers |
 |---|---|
@@ -976,12 +984,14 @@ These come from reading the code at this snapshot. Bug #1 was partly verified by
 | `execution/__tests__/variableResolver.test.js` | secrets, variables, and node domains; nested paths; unresolved placeholders left intact; multiple placeholders |
 | `execution/__tests__/conditionHandler.test.js` | all operator families; invalid regex is safe; template operands |
 | `execution/__tests__/emailHandler.test.js` | unresolved-secret guard names **all** missing keys; sends when resolved; literal values accepted (nodemailer mocked) |
-| `execution/__tests__/geminiHandler.test.js` | a hung model doesn't consume the budget; fallback on 503; fail fast on 401; mock mode without a key (SDK mocked) |
-| `__tests__/aiWorkflow.test.js` | SSRF guard allow/block lists; the 4 fallback templates; normalizer coordinates, cycle error, empty error |
+| `execution/__tests__/ollamaHandler.test.js` | resolves variables, calls Ollama, returns text + exact token counts; actionable errors for a missing model and for Ollama not running; empty prompt fails; **legacy `gemini` nodes** ignore their Gemini model name and run on the default Qwen model (`fetch` stubbed) |
+| `execution/__tests__/rag.test.js` | `embedTexts` embeds a batch in one `/api/embed` call; falls back to the offline embedding when Ollama is unreachable; does **not** switch spaces when a query must match an Ollama-indexed store; forced local mode never calls Ollama (`fetch` stubbed) |
+| `__tests__/aiWorkflow.test.js` | SSRF guard allow/block lists; the 4 fallback templates (`ollama_1` nodes; RAG uses `{{retrieve_1.context}}`); normalizer coordinates, cycle error, empty error; legacy `gemini` → `ollama` conversion |
+| `__tests__/copilot.test.js` | conversational copilot: clarify vs build, JSON schema + canvas sent, cyclic/non-JSON output handling, 503 when Ollama is offline, warm-up, email-recipient guard, auto-layout, canvas summary |
 
 **Manual scripts** (run with `node`, from `backend/`):
 
-- `test_all_nodes.js` monkey-patches `nodemailer.createTransport`, runs a 10-node linear chain through `executeWorkflow(workflow, null)`, and prints a PASS/FAIL matrix and all logs. It makes real network calls to jsonplaceholder, and to Gemini if a key is set.
+- `test_all_nodes.js` monkey-patches `nodemailer.createTransport`, runs a 10-node linear chain through `executeWorkflow(workflow, null)`, and prints a PASS/FAIL matrix and all logs. It makes real network calls to jsonplaceholder, and to the local Ollama server for the `ollama` node (which fails if Ollama is not running).
 - `test_security.js` starts the app on port 5199, registers users A and B, and checks that B can't read, update, or delete A's workflow or read A's execution. It also checks ad-hoc validation (400s), socket rejection without or with a bad token, that B can't join A's execution room, and that a revoked token gets 401 after logout. When Mongo is connected it deletes `test-*@flowforge.com` users and **all** `RevokedToken` docs.
 
 There are **no frontend tests**.
@@ -1004,6 +1014,7 @@ There are **no frontend tests**.
 | **Alias** | An extra `nodeOutputs` key (label slug or type) pointing at a node's output |
 | **Secrets Vault** | Per-user AES-256-GCM-encrypted key/value store, referenced as `{{secrets.KEY}}` |
 | **In-memory mode** | Dev-only operation without MongoDB, using JS `Map`s |
-| **Mock / fallback mode** | Operation without a Gemini key (canned AI text, local embeddings, keyword-matched Copilot) |
+| **Fallback mode** | Operation without Ollama: embeddings use offline `local-tfidf`, and the prompt generator uses the keyword matcher. There is no mock for AI text; Local AI nodes fail with a "how to fix" error. |
+| **Legacy `gemini` alias** | The removed Gemini node type, still accepted so old workflows run: executed by `ollamaHandler`, rendered by `OllamaNode`, converted to `ollama` by the AI normalizer |
 | **Two-phase run** | HTTP prepare (`pending`), then socket `start_execution`, so no events are missed |
 | **Copilot** | The prompt-to-workflow generator (`/workflows/generate-from-prompt`) |
