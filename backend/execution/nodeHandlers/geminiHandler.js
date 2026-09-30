@@ -4,11 +4,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 // Free-tier Gemini models used as automatic fallbacks when the selected model is
 // temporarily unavailable. Ordered roughly most-capable first. All are confirmed
 // to work on the free tier, so an outage on one rolls over to the next at no cost.
+// Trimmed to 2: enough to survive a transient outage on the primary model
+// without turning one slow/rate-limited node into 5 sequential network calls.
 const FALLBACK_MODELS = [
   'gemini-flash-latest',
-  'gemini-3.1-flash-lite',
-  'gemini-3.5-flash',
-  'gemini-flash-lite-latest'
+  'gemini-3.1-flash-lite'
 ];
 
 /**
@@ -24,8 +24,30 @@ function isFallbackableError(message = '') {
     m.includes('429') || m.includes('quota') || m.includes('exhausted') || m.includes('rate limit') ||
     m.includes('500') || m.includes('internal error') ||
     m.includes('404') || m.includes('not found') || m.includes('no longer available') ||
-    m.includes('fetch failed') || m.includes('etimedout') || m.includes('econnreset') || m.includes('network')
+    m.includes('fetch failed') || m.includes('etimedout') || m.includes('econnreset') || m.includes('network') ||
+    m.includes('did not respond')
   );
+}
+
+/**
+ * Per-attempt ceiling. The engine already wraps the whole handler in a 30s
+ * timeout, but that guards the *node*, not each API call — so a single request
+ * that hangs consumed the entire budget and the fallback chain below never got
+ * to run (the symptom: a bare "timed out after 30000ms" with no per-model warn
+ * logged). Bounding each attempt keeps the chain meaningful and turns a hang
+ * into an attributable error.
+ */
+const PER_ATTEMPT_TIMEOUT_MS = 11000;
+
+function withTimeout(promise, ms, label) {
+  let timer;
+  const guard = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} did not respond within ${ms}ms (network unreachable or model unavailable)`)),
+      ms
+    );
+  });
+  return Promise.race([promise, guard]).finally(() => clearTimeout(timer));
 }
 
 export async function geminiHandler(node, context) {
@@ -63,14 +85,28 @@ export async function geminiHandler(node, context) {
   const triedModels = [];
   let lastError = null;
 
+  // Split the budget across the chain so two hung attempts still land inside
+  // the engine's node timeout rather than tripping it.
+  const perAttemptMs = Math.min(
+    parseInt(nodeData.geminiTimeoutMs) || PER_ATTEMPT_TIMEOUT_MS,
+    Math.floor(28000 / Math.max(1, attemptChain.length))
+  );
+
   for (const modelName of attemptChain) {
     triedModels.push(modelName);
     try {
+      // Logged before the call so a hang is attributable to a specific model
+      // instead of surfacing as an anonymous node timeout.
+      context.addLog(node.id, 'gemini', 'info', `Calling model "${modelName}" (timeout ${perAttemptMs}ms)…`);
       const model = genAI.getGenerativeModel({
         model: modelName,
         generationConfig: Number.isFinite(temperature) ? { temperature } : undefined
       });
-      const response = await model.generateContent(resolvedPrompt);
+      const response = await withTimeout(
+        model.generateContent(resolvedPrompt),
+        perAttemptMs,
+        `Model "${modelName}"`
+      );
 
       const aiText = response.response?.text() || '';
       const estimatedTokens = Math.ceil((resolvedPrompt.length + aiText.length) / 4);

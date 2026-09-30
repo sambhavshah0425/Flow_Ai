@@ -8,6 +8,7 @@ import { ConditionNode } from './ConditionNode';
 import { EmbedNode } from './EmbedNode';
 import { RetrieveNode } from './RetrieveNode';
 import { EmailNode } from './EmailNode';
+import { OllamaNode } from './OllamaNode';
 
 export const nodeTypes = {
   text: TextNode,
@@ -19,5 +20,6 @@ export const nodeTypes = {
   condition: ConditionNode,
   embed: EmbedNode,
   retrieve: RetrieveNode,
-  email: EmailNode
+  email: EmailNode,
+  ollama: OllamaNode
 };

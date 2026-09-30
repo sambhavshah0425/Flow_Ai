@@ -1,10 +1,11 @@
 import React from 'react';
 import { useWorkflowStore } from '../store/useWorkflowStore';
-import { Type, FileText, Sparkles, Globe, Clock, Download, GitBranch, Database, Search, Mail, Plus } from 'lucide-react';
+import { Type, FileText, Sparkles, Globe, Clock, Download, GitBranch, Database, Search, Mail, Plus, Bot } from 'lucide-react';
 
 const NODE_PALETTE = [
   { type: 'text', label: 'Text Input', icon: Type, color: 'text-blue-400 bg-blue-500/10 border-blue-500/20', desc: 'Raw text or prompt variable' },
   { type: 'pdf', label: 'PDF Reader', icon: FileText, color: 'text-red-400 bg-red-500/10 border-red-500/20', desc: 'Extract text from PDF file' },
+  { type: 'ollama', label: 'Local AI (Qwen)', icon: Bot, color: 'text-teal-400 bg-teal-500/10 border-teal-500/20', desc: 'Free local AI via Ollama' },
   { type: 'gemini', label: 'Gemini AI', icon: Sparkles, color: 'text-purple-400 bg-purple-500/10 border-purple-500/20', desc: 'AI summary & generation' },
   { type: 'embed', label: 'Embed & Index', icon: Database, color: 'text-violet-400 bg-violet-500/10 border-violet-500/20', desc: 'Chunk & embed text for RAG' },
   { type: 'retrieve', label: 'Retrieve', icon: Search, color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20', desc: 'Semantic search over indexed text' },

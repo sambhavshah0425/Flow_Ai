@@ -1,11 +1,13 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWorkflowStore } from '../store/useWorkflowStore';
 import { useExecutionStore } from '../store/useExecutionStore';
-import { Plus, Workflow as WorkflowIcon, Zap, Clock, Sparkles, FolderOpen, ArrowUpRight, Play, Trash2 } from 'lucide-react';
+import { AICopilotModal } from '../components/AICopilotModal';
+import { Plus, Workflow as WorkflowIcon, Zap, Clock, Sparkles, FolderOpen, ArrowUpRight, Play, Trash2, Wand2 } from 'lucide-react';
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const [isCopilotOpen, setIsCopilotOpen] = useState(false);
   const { workflows, fetchWorkflows, loadWorkflow, resetCanvas, loadingWorkflows } = useWorkflowStore();
   const { executionHistory, fetchExecutionHistory } = useExecutionStore();
 
@@ -24,6 +26,10 @@ export function DashboardPage() {
     navigate('/builder');
   };
 
+  const handleWorkflowReady = (wf, autoRun) => {
+    navigate('/builder');
+  };
+
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
       {/* Welcome Banner */}
@@ -34,15 +40,24 @@ export function DashboardPage() {
             Agentic Orchestration Platform
           </div>
           <h1 className="text-2xl font-bold text-white">Workflow Automation Dashboard</h1>
-          <p className="text-sm text-slate-400">Design, execute, and monitor DAG-based AI workflows visually.</p>
+          <p className="text-sm text-slate-400">Design, execute, and monitor DAG-based AI workflows visually or generate them autonomously with 1 prompt.</p>
         </div>
-        <button
-          onClick={handleCreateNew}
-          className="z-10 bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 hover:to-brand-600 text-white font-semibold px-5 py-2.5 rounded-xl text-sm flex items-center gap-2 shadow-lg shadow-brand-500/20 transition-all self-start md:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          Create New Workflow
-        </button>
+        <div className="flex items-center gap-3 z-10 self-start md:self-auto">
+          <button
+            onClick={() => setIsCopilotOpen(true)}
+            className="bg-gradient-to-r from-purple-600 via-brand-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-4 py-2.5 rounded-xl text-sm flex items-center gap-2 shadow-lg shadow-purple-500/25 border border-purple-400/30 transition-all"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+            AI Prompt Automator
+          </button>
+          <button
+            onClick={handleCreateNew}
+            className="bg-dark-700 hover:bg-dark-600 text-slate-200 hover:text-white font-semibold px-4 py-2.5 rounded-xl text-sm flex items-center gap-2 border border-dark-600 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Manual Builder
+          </button>
+        </div>
       </div>
 
       {/* Metrics Row */}
@@ -139,6 +154,13 @@ export function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* AI Copilot Prompt Modal */}
+      <AICopilotModal
+        isOpen={isCopilotOpen}
+        onClose={() => setIsCopilotOpen(false)}
+        onWorkflowReady={handleWorkflowReady}
+      />
     </div>
   );
 }

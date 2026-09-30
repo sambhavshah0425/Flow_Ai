@@ -2,10 +2,10 @@ import React from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 
 const ACCENT = {
-  run: { text: 'text-run-400', glow: 'group-hover:shadow-[0_0_40px_-12px_rgba(52,211,153,0.35)]', bar: 'from-transparent to-run-500/15', dot: 'bg-run-500/40' },
-  aiv: { text: 'text-aiv-400', glow: 'group-hover:shadow-[0_0_40px_-12px_rgba(167,139,250,0.35)]', bar: 'from-transparent to-aiv-500/15', dot: 'bg-aiv-500/40' },
-  flow: { text: 'text-flow-400', glow: 'group-hover:shadow-[0_0_40px_-12px_rgba(34,211,238,0.30)]', bar: 'from-transparent to-flow-500/15', dot: 'bg-flow-500/40' },
-  brand: { text: 'text-brand-400', glow: 'group-hover:shadow-[0_0_40px_-12px_rgba(59,130,246,0.35)]', bar: 'from-transparent to-brand-500/15', dot: 'bg-brand-500/40' }
+  run: { text: 'text-lp-400', glow: 'group-hover:shadow-[0_0_40px_-12px_rgba(52,211,153,0.35)]', bar: 'from-transparent to-lp-500/15', dot: 'bg-lp-500/40' },
+  aiv: { text: 'text-lp-300', glow: 'group-hover:shadow-[0_0_40px_-12px_rgba(167,139,250,0.35)]', bar: 'from-transparent to-lp-500/15', dot: 'bg-lp-500/40' },
+  flow: { text: 'text-lp-400', glow: 'group-hover:shadow-[0_0_40px_-12px_rgba(34,211,238,0.30)]', bar: 'from-transparent to-lp-500/15', dot: 'bg-lp-500/40' },
+  brand: { text: 'text-lp-400', glow: 'group-hover:shadow-[0_0_40px_-12px_rgba(59,130,246,0.35)]', bar: 'from-transparent to-lp-500/15', dot: 'bg-lp-500/40' }
 };
 
 /**
@@ -21,7 +21,7 @@ export function ClaimProofCard({ icon: Icon, title, description, proof, accent =
 
   return (
     <div
-      className={`group relative flex flex-col md:flex-row items-stretch rounded-2xl border border-white/[0.07] bg-dark-850/60 backdrop-blur-xl overflow-hidden transition-all duration-500 ease-expo hover:border-white/15 ${a.glow}`}
+      className={`group relative flex flex-col md:flex-row items-stretch rounded-2xl border border-white/[0.07] bg-lp-850/60 backdrop-blur-xl overflow-hidden transition-all duration-500 ease-expo hover:border-white/15 ${a.glow}`}
     >
       {/* Claim */}
       <div className="flex-1 p-6 md:p-7 flex flex-col justify-center">
@@ -35,8 +35,8 @@ export function ClaimProofCard({ icon: Icon, title, description, proof, accent =
       </div>
 
       {/* Proof */}
-      <div className="md:w-80 lg:w-96 border-t md:border-t-0 md:border-l border-white/[0.06] bg-dark-950/60 relative overflow-hidden shrink-0">
-        <div className="flex items-center justify-between px-4 py-2 border-b border-white/[0.06] bg-dark-900/40">
+      <div className="md:w-80 lg:w-96 border-t md:border-t-0 md:border-l border-white/[0.06] bg-lp-950/60 relative overflow-hidden shrink-0">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-white/[0.06] bg-lp-900/40">
           <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">{proof.label}</span>
           <div className="flex gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity" aria-hidden="true">
             <span className={`w-1.5 h-1.5 rounded-full ${a.dot}`} />

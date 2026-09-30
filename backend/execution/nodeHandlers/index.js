@@ -9,6 +9,7 @@ import { conditionHandler } from './conditionHandler.js';
 import { embedHandler } from './embedHandler.js';
 import { retrieveHandler } from './retrieveHandler.js';
 import { emailHandler } from './emailHandler.js';
+import { ollamaHandler } from './ollamaHandler.js';
 
 export function registerDefaultHandlers() {
   nodeRegistry.register('text', textHandler);
@@ -21,4 +22,5 @@ export function registerDefaultHandlers() {
   nodeRegistry.register('embed', embedHandler);
   nodeRegistry.register('retrieve', retrieveHandler);
   nodeRegistry.register('email', emailHandler);
+  nodeRegistry.register('ollama', ollamaHandler);
 }

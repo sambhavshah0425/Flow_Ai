@@ -12,7 +12,7 @@ const STACK = [
 
 export function StackStrip() {
   return (
-    <section aria-label="Technology stack" className="border-y border-white/[0.05] bg-dark-800/30">
+    <section aria-label="Technology stack" className="border-y border-white/[0.05] bg-lp-800/30">
       <Reveal className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
         <p className="text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-7">
           Built on a stack you already know

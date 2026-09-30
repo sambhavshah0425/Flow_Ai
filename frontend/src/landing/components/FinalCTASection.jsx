@@ -1,47 +1,87 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { motion, useScroll, useTransform, useReducedMotion } from 'framer-motion';
+import { ArrowRight } from 'lucide-react';
 import { Reveal } from './Reveal';
-import { ArrowRight, Github } from 'lucide-react';
 
 const COPY = {
-  title: 'Your models. Your pipelines. Your servers.',
-  body: 'FlowForge OS is self-hosted and open source — no metered runs, no vendor lock-in, no waiting on someone else’s roadmap. Clone it, run it, and ship your first AI pipeline today.',
-  primaryCta: 'Start Building Free',
-  secondaryCta: 'Star on GitHub'
+  title: 'Ready to Build Smarter?',
+  body: 'Join thousands of developers and builders automating the future with FlowForge OS.',
+  primaryCta: 'Start Building Free'
 };
 
 export function FinalCTASection() {
+  const containerRef = useRef(null);
+  const reduceMotion = useReducedMotion();
+
+  // Scroll parallax mapping
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start end", "end start"]
+  });
+
+  const orbParallaxY = useTransform(scrollYProgress, [0, 1], [-20, 20]);
+
   return (
-    <section aria-labelledby="final-cta-heading" className="py-24 sm:py-32 relative overflow-hidden">
-      <div aria-hidden="true" className="absolute inset-0 -z-10 pointer-events-none">
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[800px] h-[420px] rounded-full bg-brand-700/20 blur-[140px]" />
-        <div className="absolute bottom-10 left-1/4 w-[300px] h-[300px] rounded-full bg-violet-700/15 blur-[110px]" />
-      </div>
-      <Reveal className="max-w-3xl mx-auto px-4 sm:px-6 text-center space-y-7">
-        <h2 id="final-cta-heading" className="text-3xl sm:text-5xl font-bold text-white tracking-tight text-balance">
-          {COPY.title}
-        </h2>
-        <p className="text-slate-400 text-base sm:text-lg leading-relaxed max-w-xl mx-auto">{COPY.body}</p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-2">
-          <Link
-            to="/login"
-            className="group inline-flex items-center gap-2 px-7 py-4 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-brand-500 to-brand-700 hover:to-brand-600 shadow-xl shadow-brand-500/30 hover:shadow-brand-500/50 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
-          >
-            {COPY.primaryCta}
-            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-          </Link>
-          <a
-            href="https://github.com"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 px-7 py-4 rounded-xl text-sm font-semibold text-slate-200 border border-white/15 hover:border-white/30 hover:bg-white/[0.05] transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
-          >
-            <Github className="w-4 h-4" aria-hidden="true" />
-            {COPY.secondaryCta}
-          </a>
+    <section 
+      ref={containerRef}
+      id="final-cta"
+      aria-labelledby="final-cta-heading" 
+      className="py-20 sm:py-28 relative overflow-hidden bg-[#040810] text-slate-100 border-t border-white/[0.05]"
+    >
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 relative z-10">
+        
+        {/* Outlined Rounded container matching the visual pattern */}
+        <div className="border border-white/[0.08] bg-[#070e1a]/50 p-8 sm:p-12 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
+          
+          {/* Subtle glow background */}
+          <div className="absolute right-[-10%] top-[-10%] w-[320px] h-[320px] rounded-full bg-emerald-500/10 blur-[80px] pointer-events-none" />
+
+          <div className="grid lg:grid-cols-12 gap-8 items-center">
+            
+            {/* Copy column */}
+            <div className="lg:col-span-7 space-y-6">
+              <h2 id="final-cta-heading" className="lp-title text-white text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight">
+                {COPY.title}
+              </h2>
+              <p className="text-slate-400 text-sm sm:text-base leading-relaxed max-w-md">
+                {COPY.body}
+              </p>
+              
+              <div className="pt-2">
+                <Link
+                  to="/login"
+                  className="lp-cta-bar inline-flex items-center gap-2 text-sm font-bold bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 rounded-full px-8 py-4 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 shadow-lg shadow-emerald-500/20"
+                >
+                  <span>{COPY.primaryCta}</span>
+                  <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                </Link>
+              </div>
+            </div>
+
+            {/* Orb centerpiece Column */}
+            <div className="lg:col-span-5 flex justify-center lg:justify-end">
+              <motion.div 
+                style={{ y: reduceMotion ? 0 : orbParallaxY }}
+                className="w-44 h-44 relative flex items-center justify-center pointer-events-none select-none"
+              >
+                <div className={reduceMotion ? "" : "lp-float-drift w-full h-full flex items-center justify-center"}>
+                  <img
+                    src="/green-metallic-orb.png"
+                    alt="Spinning green metallic core orb"
+                    style={{ mixBlendMode: 'screen', filter: 'drop-shadow(0 15px 35px rgba(16,185,129,0.15))' }}
+                    className={`${reduceMotion ? "" : "lp-continuous-spin"} w-full h-full object-contain pointer-events-none select-none`}
+                  />
+                </div>
+              </motion.div>
+            </div>
+
+          </div>
+
         </div>
-        <p className="text-xs text-slate-500 font-mono">MIT licensed · MERN stack · runs without MongoDB for local trials</p>
-      </Reveal>
+
+      </div>
     </section>
   );
 }
+export default FinalCTASection;

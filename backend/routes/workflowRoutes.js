@@ -6,6 +6,7 @@ import {
   updateWorkflow,
   deleteWorkflow
 } from '../controllers/workflowController.js';
+import { generateWorkflowFromPrompt } from '../controllers/aiWorkflowController.js';
 import { authenticateJWT } from '../middlewares/authMiddleware.js';
 import { validateWorkflow } from '../middlewares/validationMiddleware.js';
 
@@ -13,6 +14,7 @@ const router = express.Router();
 
 router.use(authenticateJWT);
 
+router.post('/generate-from-prompt', generateWorkflowFromPrompt);
 router.post('/', validateWorkflow, createWorkflow);
 router.get('/', getUserWorkflows);
 router.get('/:id', getWorkflowById);

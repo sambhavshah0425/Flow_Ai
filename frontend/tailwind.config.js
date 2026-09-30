@@ -8,6 +8,12 @@ export default {
   theme: {
     extend: {
       colors: {
+        // ---------------------------------------------------------------
+        // APP SCALE — used by Login, Dashboard and the Workflow Builder.
+        // These are the original values and must stay that way: the landing
+        // redesign has its own isolated `lp` scale below, so restyling the
+        // marketing page can never shift the authenticated product UI.
+        // ---------------------------------------------------------------
         brand: {
           50: '#f0f6ff',
           100: '#e0edff',
@@ -26,10 +32,28 @@ export default {
           700: '#1f2937',
           600: '#374151',
         },
-        // Landing accents — each maps to a product concept
         aiv: { 400: '#a78bfa', 500: '#8b5cf6', 600: '#7c3aed', 900: '#4c1d95' }, // Gemini / AI
         flow: { 400: '#22d3ee', 500: '#06b6d4' },                                 // data-flow / edges
         run: { 400: '#34d399', 500: '#22c55e', 600: '#16a34a' },                  // execution / "Run"
+
+        // ---------------------------------------------------------------
+        // LANDING SCALE — consumed only by src/landing/**. Adding tokens is
+        // inert for every other page because nothing outside landing/ emits
+        // an `lp-*` class.
+        // ---------------------------------------------------------------
+        lp: {
+          50: '#ecfdf5',
+          100: '#d1fae5',
+          300: '#6ee7b7',
+          400: '#34d399',
+          500: '#10b981', // primary green accent
+          600: '#059669',
+          700: '#047857',
+          800: '#064e3b', // raised panel
+          850: '#022c22', // elevated surface
+          900: '#060c18', // page ground
+          950: '#030712', // deepest negative space
+        },
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],

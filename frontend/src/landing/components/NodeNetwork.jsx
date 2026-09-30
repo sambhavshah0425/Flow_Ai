@@ -11,12 +11,12 @@ import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion
 
 // ---- Graph definition (mirrors a real workflow: inputs → Gemini → outputs) ----
 const NODES = [
-  { id: 'text_1',     x: 40,  y: 120, w: 170, h: 64, color: '#3b82f6', label: 'Text Input',  sub: 'prompt · {{text_1.text}}',   status: 'done' },
-  { id: 'pdf_1',      x: 40,  y: 330, w: 170, h: 64, color: '#f87171', label: 'PDF Reader',  sub: '11 pages extracted',          status: 'done' },
-  { id: 'gemini_1',   x: 360, y: 225, w: 200, h: 76, color: '#a78bfa', label: 'Gemini AI',   sub: 'Summarize {{pdf_1.text}}',    status: 'running' },
-  { id: 'api_1',      x: 700, y: 70,  w: 180, h: 64, color: '#34d399', label: 'REST API',    sub: 'POST /notify · 200 OK',       status: 'queued' },
-  { id: 'delay_1',    x: 700, y: 245, w: 180, h: 64, color: '#fbbf24', label: 'Delay Timer', sub: 'wait 1900 ms',                status: 'queued' },
-  { id: 'download_1', x: 700, y: 420, w: 180, h: 64, color: '#22d3ee', label: 'Download',    sub: 'ai_summary.txt',              status: 'queued' }
+  { id: 'text_1',     x: 40,  y: 120, w: 170, h: 64, color: '#0059ff', label: 'Text Input',  sub: 'prompt · {{text_1.text}}',   status: 'done' },
+  { id: 'pdf_1',      x: 40,  y: 330, w: 170, h: 64, color: '#4d8cff', label: 'PDF Reader',  sub: '11 pages extracted',          status: 'done' },
+  { id: 'gemini_1',   x: 360, y: 225, w: 200, h: 76, color: '#7aa7ff', label: 'Gemini AI',   sub: 'Summarize {{pdf_1.text}}',    status: 'running' },
+  { id: 'api_1',      x: 700, y: 70,  w: 180, h: 64, color: '#0059ff', label: 'REST API',    sub: 'POST /notify · 200 OK',       status: 'queued' },
+  { id: 'delay_1',    x: 700, y: 245, w: 180, h: 64, color: '#4d8cff', label: 'Delay Timer', sub: 'wait 1900 ms',                status: 'queued' },
+  { id: 'download_1', x: 700, y: 420, w: 180, h: 64, color: '#7aa7ff', label: 'Download',    sub: 'ai_summary.txt',              status: 'queued' }
 ];
 
 const EDGES = [
@@ -28,9 +28,9 @@ const EDGES = [
 ];
 
 const STATUS_STYLE = {
-  done:    { fill: '#34d399', text: 'Done' },
-  running: { fill: '#3b82f6', text: 'Running' },
-  queued:  { fill: '#64748b', text: 'Queued' }
+  done:    { fill: '#4d8cff', text: 'Done' },
+  running: { fill: '#0059ff', text: 'Running' },
+  queued:  { fill: '#4a5a7a', text: 'Queued' }
 };
 
 function NodeChip({ node, animate }) {
@@ -38,7 +38,7 @@ function NodeChip({ node, animate }) {
   return (
     <g className={animate ? 'ff-float' : undefined} style={animate ? { animationDelay: `${(node.x + node.y) % 5 * 0.35}s` } : undefined}>
       {/* Card */}
-      <rect x={node.x} y={node.y} width={node.w} height={node.h} rx="14" fill="rgba(17,24,39,0.92)" stroke={node.color} strokeOpacity="0.55" strokeWidth="1.5" />
+      <rect x={node.x} y={node.y} width={node.w} height={node.h} rx="14" fill="rgba(4,26,83,0.92)" stroke={node.color} strokeOpacity="0.55" strokeWidth="1.5" />
       {node.status === 'running' && (
         <rect x={node.x} y={node.y} width={node.w} height={node.h} rx="14" fill="none" stroke={node.color} strokeOpacity="0.35" strokeWidth="5" className={animate ? 'ff-ring' : undefined} />
       )}
@@ -54,8 +54,8 @@ function NodeChip({ node, animate }) {
         <text x={node.x + node.w - 44} y={node.y + 26} fill={status.fill} fontSize="10" fontWeight="600" fontFamily="Inter, sans-serif">{status.text}</text>
       </g>
       {/* Ports */}
-      <circle cx={node.x} cy={node.y + node.h / 2} r="4" fill="#3b82f6" stroke="#0b0f17" strokeWidth="2" />
-      <circle cx={node.x + node.w} cy={node.y + node.h / 2} r="4" fill="#3b82f6" stroke="#0b0f17" strokeWidth="2" />
+      <circle cx={node.x} cy={node.y + node.h / 2} r="4" fill="#0059ff" stroke="#030923" strokeWidth="2" />
+      <circle cx={node.x + node.w} cy={node.y + node.h / 2} r="4" fill="#0059ff" stroke="#030923" strokeWidth="2" />
     </g>
   );
 }
@@ -88,8 +88,8 @@ export default function NodeNetwork() {
           <title>FlowForge OS pipeline in mid-execution</title>
           <defs>
             <linearGradient id="ff-edge" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.7" />
-              <stop offset="100%" stopColor="#a78bfa" stopOpacity="0.7" />
+              <stop offset="0%" stopColor="#0059ff" stopOpacity="0.75" />
+              <stop offset="100%" stopColor="#7aa7ff" stopOpacity="0.75" />
             </linearGradient>
             <filter id="ff-glow" x="-80%" y="-80%" width="260%" height="260%">
               <feGaussianBlur stdDeviation="3.5" result="blur" />
@@ -119,7 +119,7 @@ export default function NodeNetwork() {
               <path id={edge.id} d={edge.d} fill="none" stroke="url(#ff-edge)" strokeWidth="2" className={animate ? 'ff-dash' : undefined} opacity="0.85" />
               {/* Traveling data pulse */}
               {animate && (
-                <circle r="4.5" fill="#22d3ee" filter="url(#ff-glow)">
+                <circle r="4.5" fill="#4d8cff" filter="url(#ff-glow)">
                   <animateMotion dur={edge.dur} begin={edge.begin} repeatCount="indefinite" rotate="none">
                     <mpath href={`#${edge.id}`} />
                   </animateMotion>

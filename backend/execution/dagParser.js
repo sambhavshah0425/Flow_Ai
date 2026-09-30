@@ -55,9 +55,40 @@ export function parseDAG(nodes = [], edges = []) {
 
   // Return nodes sorted in execution order
   const orderedNodes = sortedNodeIds.map(id => nodeMap[id]);
+
+  // Compute a "level" per node = its distance from the nearest root, using the
+  // already-topologically-sorted order so each node's dependencies are always
+  // resolved before it's visited. Nodes sharing a level have no dependency
+  // relationship to each other and can safely be executed in parallel.
+  const level = {};
+  sortedNodeIds.forEach(id => { level[id] = 0; });
+
+  // Walk nodes in topo order, pushing level = 1 + max(level of incoming sources)
+  const incomingBySource = {};
+  edges.forEach(edge => {
+    if (!incomingBySource[edge.target]) incomingBySource[edge.target] = [];
+    incomingBySource[edge.target].push(edge.source);
+  });
+  sortedNodeIds.forEach(id => {
+    const sources = incomingBySource[id] || [];
+    let maxLevel = -1;
+    sources.forEach(srcId => {
+      if (level[srcId] !== undefined && level[srcId] > maxLevel) maxLevel = level[srcId];
+    });
+    level[id] = maxLevel + 1;
+  });
+
+  const maxLevelValue = sortedNodeIds.reduce((max, id) => Math.max(max, level[id]), 0);
+  const levels = [];
+  for (let i = 0; i <= maxLevelValue; i++) levels.push([]);
+  sortedNodeIds.forEach(id => {
+    levels[level[id]].push(nodeMap[id]);
+  });
+
   return {
     orderedNodes,
     sortedNodeIds,
+    levels, // array of arrays — nodes in the same bucket can run concurrently
     hasCycle: false
   };
 }

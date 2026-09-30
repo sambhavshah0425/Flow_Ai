@@ -216,6 +216,51 @@ export function NodeInspector() {
           </div>
         )}
 
+        {type === 'ollama' && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-300 mb-1">Local Model (Ollama)</label>
+              <select
+                value={data.model || 'qwen3:1.7b'}
+                onChange={(e) => handleChange('model', e.target.value)}
+                className="w-full bg-dark-900 border border-dark-600 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+              >
+                <option value="qwen3:1.7b">qwen3:1.7b (Fast, recommended)</option>
+                <option value="qwen3:4b">qwen3:4b (Better, slower)</option>
+                <option value="qwen3:8b">qwen3:8b (Best, needs 16GB RAM)</option>
+              </select>
+              <p className="text-[10px] text-slate-500 mt-1">
+                Pull it once with <span className="font-mono text-teal-400">ollama pull {data.model || 'qwen3:1.7b'}</span>
+              </p>
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                <span>Prompt</span>
+                <span className="text-[10px] text-teal-400 font-mono">&#123;&#123;node.output&#125;&#125;</span>
+              </label>
+              <textarea
+                rows={4}
+                value={data.prompt || ''}
+                onChange={(e) => handleChange('prompt', e.target.value)}
+                className="w-full bg-dark-900 border border-dark-600 rounded-lg p-2.5 text-xs text-white font-mono focus:outline-none focus:border-teal-500"
+                placeholder="Summarize {{text_1.text}} into bullet points"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-300 mb-1">Temperature ({data.temperature ?? 0.7})</label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={data.temperature !== undefined ? data.temperature : 0.7}
+                onChange={(e) => handleChange('temperature', parseFloat(e.target.value))}
+                className="w-full accent-teal-500 cursor-pointer"
+              />
+            </div>
+          </div>
+        )}
+
         {type === 'api' && (
           <div className="space-y-3">
             <div>

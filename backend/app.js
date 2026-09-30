@@ -66,6 +66,7 @@ import secretRoutes from './routes/secretRoutes.js';
 import workflowRoutes from './routes/workflowRoutes.js';
 import executionRoutes from './routes/executionRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
+import copilotRoutes from './routes/copilotRoutes.js';
 
 // Route mounts
 app.use('/api/auth', authRoutes);
@@ -73,6 +74,7 @@ app.use('/api/secrets', secretRoutes);
 app.use('/api/workflows', workflowRoutes);
 app.use('/api/executions', executionRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/copilot', copilotRoutes);
 
 // Centralized 404 Handler
 app.use((req, res, next) => {

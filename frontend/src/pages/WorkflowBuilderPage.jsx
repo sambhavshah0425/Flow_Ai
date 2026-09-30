@@ -1,12 +1,10 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   ReactFlow,
   Background,
   Controls,
   MiniMap,
-  addEdge,
-  useNodesState,
-  useEdgesState
+  addEdge
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -17,17 +15,22 @@ import { nodeTypes } from '../nodes/nodeTypes';
 import { NodeSidebar } from '../components/NodeSidebar';
 import { NodeInspector } from '../components/NodeInspector';
 import { ExecutionConsole } from '../components/ExecutionConsole';
+import { AICopilotModal } from '../components/AICopilotModal';
+import { CopilotChatPanel } from '../components/CopilotChatPanel';
+import { useCopilotStore } from '../store/useCopilotStore';
 
-import { Play, Save, Check, Loader2, ArrowLeft, Cpu } from 'lucide-react';
+import { Play, Save, Check, Loader2, ArrowLeft, Cpu, Sparkles, Bot } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export function WorkflowBuilderPage() {
   const navigate = useNavigate();
+  const [isCopilotOpen, setIsCopilotOpen] = useState(false);
   const {
-    nodes: storeNodes,
-    edges: storeEdges,
+    nodes,
+    edges,
     workflowName,
-    setNodes: setStoreNodes,
+    onNodesChange,
+    onEdgesChange,
     setEdges: setStoreEdges,
     setSelectedNodeId,
     saveWorkflow,
@@ -35,18 +38,7 @@ export function WorkflowBuilderPage() {
   } = useWorkflowStore();
 
   const { runCurrentWorkflow, isExecuting, subscribeToSocketEvents } = useExecutionStore();
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(storeNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(storeEdges);
-
-  // Sync ReactFlow local nodes/edges with Zustand store
-  useEffect(() => {
-    setNodes(storeNodes);
-  }, [storeNodes]);
-
-  useEffect(() => {
-    setEdges(storeEdges);
-  }, [storeEdges]);
+  const { isOpen: isChatOpen, open: openChat, close: closeChat } = useCopilotStore();
 
   useEffect(() => {
     subscribeToSocketEvents();
@@ -62,9 +54,8 @@ export function WorkflowBuilderPage() {
       ...(branchColor && { style: { stroke: branchColor, strokeWidth: 2 } })
     };
     const newEdges = addEdge(edge, edges);
-    setEdges(newEdges);
     setStoreEdges(newEdges);
-  }, [edges, setEdges, setStoreEdges]);
+  }, [edges, setStoreEdges]);
 
   const onNodeClick = useCallback((_, node) => {
     setSelectedNodeId(node.id);
@@ -75,10 +66,6 @@ export function WorkflowBuilderPage() {
   }, [setSelectedNodeId]);
 
   const handleRunWorkflow = async () => {
-    // Save state to store first
-    setStoreNodes(nodes);
-    setStoreEdges(edges);
-
     const workflowData = {
       name: workflowName,
       nodes,
@@ -89,8 +76,6 @@ export function WorkflowBuilderPage() {
   };
 
   const handleSaveWorkflow = async () => {
-    setStoreNodes(nodes);
-    setStoreEdges(edges);
     await saveWorkflow();
   };
 
@@ -117,6 +102,28 @@ export function WorkflowBuilderPage() {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => (isChatOpen ? closeChat() : openChat())}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all ${
+              isChatOpen
+                ? 'bg-teal-500 text-slate-950 border-teal-400'
+                : 'bg-teal-500/10 text-teal-300 border-teal-500/30 hover:bg-teal-500/20'
+            }`}
+            title="Chat with the local Qwen AI to build this workflow"
+          >
+            <Bot className="w-3.5 h-3.5" />
+            <span>Chat with Qwen</span>
+          </button>
+
+          <button
+            onClick={() => setIsCopilotOpen(true)}
+            className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-purple-600 to-brand-600 hover:from-purple-500 hover:to-brand-500 text-white flex items-center gap-1.5 shadow-lg shadow-purple-500/20 border border-purple-400/30 transition-all group"
+            title="Prompt-to-DAG Autonomous Generator"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+            <span>AI Copilot</span>
+          </button>
+
           <button
             onClick={handleSaveWorkflow}
             disabled={isSaving}
@@ -164,10 +171,19 @@ export function WorkflowBuilderPage() {
 
         {/* Right Node Inspector */}
         <NodeInspector />
+
+        {/* Qwen chat copilot (slides over the inspector when open) */}
+        <CopilotChatPanel />
       </div>
 
       {/* Bottom Execution Console Drawer */}
       <ExecutionConsole nodes={nodes} />
+
+      {/* AI Copilot Prompt Modal */}
+      <AICopilotModal
+        isOpen={isCopilotOpen}
+        onClose={() => setIsCopilotOpen(false)}
+      />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { resolveVariables } from '../utils/variableResolver.js';
+import { resolveVariables, findUnresolved } from '../utils/variableResolver.js';
 
 /**
  * Email (send) node — sends an email over SMTP. Recipient/subject/body and the
@@ -20,6 +20,22 @@ export async function emailHandler(node, context) {
   const user = r(d.smtpUser);
   const pass = r(d.smtpPass);
   const from = r(d.from) || user;
+
+  // A reference that never resolved is still a non-empty string, so it would
+  // slip past the emptiness check below and reach nodemailer as a literal
+  // hostname. Catch it here and name the key that needs setting.
+  const unresolved = [];
+  for (const [label, value] of Object.entries({ Host: host, User: user, Password: pass, To: to, From: from })) {
+    for (const ref of findUnresolved(value)) unresolved.push(`${ref} (used as ${label})`);
+  }
+  if (unresolved.length) {
+    const keys = [...new Set(unresolved.map((u) => u.split('.').pop().split(' ')[0]))];
+    throw new Error(
+      `Email node: unresolved reference(s) — ${unresolved.join(', ')}. ` +
+      `Add ${keys.join(', ')} in the Secrets Vault, or replace the placeholder with a literal value ` +
+      `(Gmail: host smtp.gmail.com, port 465).`
+    );
+  }
 
   if (!to) throw new Error('Email node: "To" recipient is required.');
   if (!host || !user || !pass) {

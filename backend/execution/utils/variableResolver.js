@@ -50,6 +50,23 @@ export function resolveVariables(templateStr, context) {
   });
 }
 
+/**
+ * Lists the {{...}} references still present after resolution.
+ *
+ * resolveVariables deliberately leaves unknown references untouched so prompt
+ * text degrades gracefully. That is wrong for connection-critical fields: a
+ * raw "{{secrets.SMTP_HOST}}" handed to the network layer surfaces as
+ * "getaddrinfo ENOTFOUND {{secrets.SMTP_HOST}}" instead of naming the secret
+ * that was never set. Handlers use this to fail with an actionable message.
+ */
+export function findUnresolved(value) {
+  const refs = [];
+  const re = /\{\{\s*([a-zA-Z0-9_.\-]+)\s*\}\}/g;
+  let m;
+  while ((m = re.exec(String(value ?? ''))) !== null) refs.push(m[1]);
+  return refs;
+}
+
 function getNestedProperty(obj, propPath) {
   if (!obj || typeof obj !== 'object') return undefined;
   const parts = propPath.split('.');

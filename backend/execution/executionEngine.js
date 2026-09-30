@@ -111,7 +111,7 @@ export async function executeWorkflow(workflow, userId, prepared = null) {
   const edges = workflow.edges || [];
 
   // 1. Validate & Parse DAG
-  const { orderedNodes } = parseDAG(nodes, edges);
+  const { orderedNodes, levels } = parseDAG(nodes, edges);
 
   // 2. Fetch Decrypted User Secrets for Runtime Injection
   let secrets = {};
@@ -169,43 +169,51 @@ export async function executeWorkflow(workflow, userId, prepared = null) {
     return false;
   };
 
-  // 5. Execute Nodes in Topological Order
-  for (const node of orderedNodes) {
+  // Hard ceiling on a single handler attempt, so a hung network call can never
+  // stall the whole run. Per-node override via node.data.timeoutMs still applies
+  // (capped at this ceiling) — this is a safety net, not a replacement for it.
+  const HARD_ATTEMPT_TIMEOUT_MS = 30000;
+  // Local models (Ollama/Qwen) run on this machine's CPU and can legitimately
+  // take longer than a cloud API, so they get a wider ceiling.
+  const LOCAL_AI_TIMEOUT_MS = 180000;
+
+  function runWithTimeout(promise, ms) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`Node execution timed out after ${ms}ms`));
+      }, ms);
+      promise.then(
+        (val) => { clearTimeout(timer); resolve(val); },
+        (err) => { clearTimeout(timer); reject(err); }
+      );
+    });
+  }
+
+  // Runs a single node's full retry loop and emits its events. Never throws —
+  // resolves to { nodeId, success, error } so the caller can await a whole
+  // level in parallel via Promise.all without one rejection derailing others.
+  async function runSingleNode(node) {
     const nodeId = node.id;
     const nodeType = (node.type || 'text').toLowerCase();
     const nodeLabel = node.data?.label || node.data?.name || nodeType;
 
-    // Branch skipping: skip a node only when it HAS incoming edges and ALL of them
-    // are dead. A node reachable through any live edge still runs (merge/OR semantics).
-    const incoming = edges.filter((e) => e.target === nodeId);
-    if (incoming.length > 0 && incoming.every(isEdgeDead)) {
-      skippedNodes.add(nodeId);
-      context.addLog(nodeId, nodeType, 'info', 'Node skipped — inactive branch');
-      emitExecutionEvent(executionId, 'node.skipped', {
-        executionId,
-        nodeId,
-        nodeType,
-        nodeLabel,
-        timestamp: new Date().toISOString()
-      });
-      continue;
-    }
-
-    // Retry settings (with defaults)
-    const maxRetries = parseInt(node.data?.maxRetries) || 1; // 1 attempt minimum
-    const retryDelayMs = parseInt(node.data?.retryDelayMs) || 1000;
+    // Retry settings (with defaults). Fresh nodes default to a single attempt —
+    // retries are opt-in per node, not a blanket 3x tax on every run.
+    const maxRetries = parseInt(node.data?.maxRetries) || 1;
+    const retryDelayMs = parseInt(node.data?.retryDelayMs) || 500;
     const backoffFactor = parseFloat(node.data?.backoffFactor) || 2.0;
+    const ceilingMs = nodeType === 'ollama' ? LOCAL_AI_TIMEOUT_MS : HARD_ATTEMPT_TIMEOUT_MS;
+    const attemptTimeoutMs = Math.min(
+      parseInt(node.data?.timeoutMs) || ceilingMs,
+      ceilingMs
+    );
 
     let attempt = 0;
     let nodeSuccess = false;
     let lastError = null;
 
-    // Emit node.started event
     emitExecutionEvent(executionId, 'node.started', {
-      executionId,
-      nodeId,
-      nodeType,
-      nodeLabel,
+      executionId, nodeId, nodeType, nodeLabel,
       timestamp: new Date().toISOString()
     });
 
@@ -221,48 +229,31 @@ export async function executeWorkflow(workflow, userId, prepared = null) {
           await new Promise(res => setTimeout(res, currentDelay));
         }
 
-        // Get registered handler from NodeRegistry
         const handler = nodeRegistry.getHandler(nodeType);
-        
-        // Execute node handler
-        const outputPayload = await handler(node, context);
-        
+        const outputPayload = await runWithTimeout(handler(node, context), attemptTimeoutMs);
+
         const nodeDurationMs = Date.now() - nodeStartTime;
 
-        // Store output payload in ExecutionContext
         context.setNodeOutput(nodeId, nodeType, nodeLabel, outputPayload);
         context.metrics.nodesExecuted++;
 
-        // Record a branch decision so downstream edge routing can skip the
-        // untaken path (Condition returns branch: 'true' | 'false').
         if (outputPayload && outputPayload.branch !== undefined) {
           takenBranch[nodeId] = outputPayload.branch;
         }
 
-        // Add success log
         const logEntry = context.addLog(
-          nodeId,
-          nodeType,
-          'info',
+          nodeId, nodeType, 'info',
           `Node executed successfully (${nodeDurationMs}ms)`,
-          outputPayload,
-          nodeDurationMs
+          outputPayload, nodeDurationMs
         );
 
-        // Save log if DB connected
         if (isDBConnected() && dbExecutionRecord) {
-          try {
-            await Log.create(logEntry);
-          } catch {}
+          try { await Log.create(logEntry); } catch {}
         }
 
-        // Emit node.completed event
         emitExecutionEvent(executionId, 'node.completed', {
-          executionId,
-          nodeId,
-          nodeType,
-          output: outputPayload,
-          durationMs: nodeDurationMs,
+          executionId, nodeId, nodeType,
+          output: outputPayload, durationMs: nodeDurationMs,
           timestamp: new Date().toISOString()
         });
 
@@ -274,61 +265,104 @@ export async function executeWorkflow(workflow, userId, prepared = null) {
     }
 
     if (!nodeSuccess) {
-      // Node execution failed after all retries
       const nodeDurationMs = Date.now() - nodeStartTime;
       const errorMsg = lastError ? lastError.message : 'Unknown node failure';
-
-      context.finish('failed', errorMsg);
 
       if (isDBConnected() && dbExecutionRecord) {
         try {
           await Log.create({
-            executionId,
-            nodeId,
-            nodeType,
-            level: 'error',
+            executionId, nodeId, nodeType, level: 'error',
             message: `Node failed permanently after ${attempt} attempts: ${errorMsg}`,
             durationMs: nodeDurationMs,
             timestamp: new Date().toISOString()
           });
-
-          await Execution.findByIdAndUpdate(executionId, {
-            status: 'failed',
-            completedAt: new Date(),
-            durationMs: context.metrics.totalDurationMs,
-            metrics: context.metrics,
-            error: errorMsg
-          });
         } catch {}
-      } else {
-        const memExec = memoryExecutions.get(executionId);
-        if (memExec) {
-          memExec.status = 'failed';
-          memExec.completedAt = new Date();
-          memExec.durationMs = context.metrics.totalDurationMs;
-          memExec.metrics = context.metrics;
-          memExec.error = errorMsg;
-          memExec.logs = context.logs;
-        }
       }
 
-      // Emit node.failed event
       emitExecutionEvent(executionId, 'node.failed', {
-        executionId,
-        nodeId,
-        nodeType,
-        error: errorMsg,
+        executionId, nodeId, nodeType, error: errorMsg,
         timestamp: new Date().toISOString()
       });
 
-      emitExecutionEvent(executionId, 'workflow.failed', {
-        executionId,
-        error: errorMsg,
-        timestamp: new Date().toISOString()
-      });
-
-      return context;
+      return { nodeId, success: false, error: errorMsg };
     }
+
+    return { nodeId, success: true };
+  }
+
+  // 5. Execute Nodes level-by-level: every node within a level has no
+  // dependency on any other node in that same level, so they run concurrently.
+  // Levels themselves still run in order, since level N+1 may depend on level N.
+  let workflowFailed = false;
+  let workflowError = null;
+
+  for (const levelNodes of levels) {
+    if (workflowFailed) break;
+
+    // Resolve which nodes in this level are actually skipped (inactive branch),
+    // using branch decisions already recorded from earlier levels.
+    const runnableNodes = [];
+    for (const node of levelNodes) {
+      const nodeId = node.id;
+      const nodeType = (node.type || 'text').toLowerCase();
+      const nodeLabel = node.data?.label || node.data?.name || nodeType;
+      const incoming = edges.filter((e) => e.target === nodeId);
+
+      if (incoming.length > 0 && incoming.every(isEdgeDead)) {
+        skippedNodes.add(nodeId);
+        context.addLog(nodeId, nodeType, 'info', 'Node skipped — inactive branch');
+        emitExecutionEvent(executionId, 'node.skipped', {
+          executionId, nodeId, nodeType, nodeLabel,
+          timestamp: new Date().toISOString()
+        });
+        continue;
+      }
+      runnableNodes.push(node);
+    }
+
+    if (runnableNodes.length === 0) continue;
+
+    // Run every node in this level in parallel.
+    const results = await Promise.all(runnableNodes.map(runSingleNode));
+
+    const failed = results.find((r) => !r.success);
+    if (failed) {
+      workflowFailed = true;
+      workflowError = failed.error;
+    }
+  }
+
+  if (workflowFailed) {
+    context.finish('failed', workflowError);
+
+    if (isDBConnected() && dbExecutionRecord) {
+      try {
+        await Execution.findByIdAndUpdate(executionId, {
+          status: 'failed',
+          completedAt: new Date(),
+          durationMs: context.metrics.totalDurationMs,
+          metrics: context.metrics,
+          error: workflowError
+        });
+      } catch {}
+    } else {
+      const memExec = memoryExecutions.get(executionId);
+      if (memExec) {
+        memExec.status = 'failed';
+        memExec.completedAt = new Date();
+        memExec.durationMs = context.metrics.totalDurationMs;
+        memExec.metrics = context.metrics;
+        memExec.error = workflowError;
+        memExec.logs = context.logs;
+      }
+    }
+
+    emitExecutionEvent(executionId, 'workflow.failed', {
+      executionId, error: workflowError,
+      timestamp: new Date().toISOString()
+    });
+
+    return context;
   }
 
   // 6. Workflow Completed Successfully

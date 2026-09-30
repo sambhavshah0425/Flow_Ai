@@ -10,10 +10,10 @@ const FOOTER_LINKS = [
 
 export function LandingFooter() {
   return (
-    <footer className="border-t border-white/[0.06] bg-dark-800/30">
+    <footer className="border-t border-white/[0.06] bg-lp-800/30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-2.5">
-          <span className="p-1.5 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700">
+          <span className="p-1.5 rounded-lg bg-gradient-to-br from-lp-500 to-lp-700">
             <Cpu className="w-4 h-4 text-white" aria-hidden="true" />
           </span>
           <span className="font-bold text-slate-200 text-sm">FlowForge OS</span>
@@ -26,7 +26,7 @@ export function LandingFooter() {
               <li key={link.label}>
                 <a
                   href={link.href}
-                  className="text-xs text-slate-400 hover:text-slate-200 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 rounded"
+                  className="text-xs text-slate-400 hover:text-slate-200 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-lp-500 rounded"
                 >
                   {link.label}
                 </a>
@@ -35,7 +35,7 @@ export function LandingFooter() {
             <li>
               <Link
                 to="/login"
-                className="text-xs text-slate-400 hover:text-slate-200 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 rounded"
+                className="text-xs text-slate-400 hover:text-slate-200 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-lp-500 rounded"
               >
                 Sign In
               </Link>
@@ -49,7 +49,7 @@ export function LandingFooter() {
             target="_blank"
             rel="noreferrer"
             aria-label="FlowForge OS on GitHub"
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500"
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-lp-500"
           >
             <Github className="w-5 h-5" aria-hidden="true" />
           </a>

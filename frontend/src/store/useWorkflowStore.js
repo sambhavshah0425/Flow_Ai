@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { api } from '../services/api';
+import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 
-const DEFAULT_NODES = [
+export const DEFAULT_NODES = [
   {
     id: 'text_1',
     type: 'text',
@@ -12,7 +13,7 @@ const DEFAULT_NODES = [
     id: 'gemini_1',
     type: 'gemini',
     position: { x: 450, y: 150 },
-    data: { label: 'Gemini AI', prompt: '{{text_1.text}}', model: 'gemini-flash-latest', temperature: 0.7, maxRetries: 3, retryDelayMs: 1500 }
+    data: { label: 'Gemini AI', prompt: '{{text_1.text}}', model: 'gemini-flash-latest', temperature: 0.7, maxRetries: 1, retryDelayMs: 500 }
   },
   {
     id: 'download_1',
@@ -27,6 +28,15 @@ const DEFAULT_EDGES = [
   { id: 'e2', source: 'gemini_1', target: 'download_1', type: 'smoothstep', animated: true }
 ];
 
+// True when the canvas still holds the untouched starter template (positions and
+// selection may have changed, but no node was added, removed or edited).
+export function isStarterCanvas(nodes) {
+  return (
+    nodes.length === DEFAULT_NODES.length &&
+    nodes.every((n, i) => n.id === DEFAULT_NODES[i].id && JSON.stringify(n.data) === JSON.stringify(DEFAULT_NODES[i].data))
+  );
+}
+
 export const useWorkflowStore = create((set, get) => ({
   workflows: [],
   currentWorkflowId: null,
@@ -35,11 +45,49 @@ export const useWorkflowStore = create((set, get) => ({
   edges: DEFAULT_EDGES,
   selectedNodeId: null,
   isSaving: false,
+  isGeneratingWorkflow: false,
+  generationError: null,
   loadingWorkflows: false,
   error: null,
 
   setNodes: (nodes) => set({ nodes }),
   setEdges: (edges) => set({ edges }),
+
+  generateWorkflowFromPrompt: async (prompt, autoRun = false) => {
+    set({ isGeneratingWorkflow: true, generationError: null });
+    try {
+      const res = await api.post('/workflows/generate-from-prompt', { prompt, autoRun });
+      const wf = res.data.workflow;
+      
+      set({
+        currentWorkflowId: null,
+        workflowName: wf.name || 'AI Generated Workflow',
+        nodes: wf.nodes && wf.nodes.length > 0 ? wf.nodes : DEFAULT_NODES,
+        edges: wf.edges && wf.edges.length > 0 ? wf.edges : DEFAULT_EDGES,
+        selectedNodeId: null,
+        isGeneratingWorkflow: false,
+        generationError: null
+      });
+
+      return { success: true, workflow: wf, autoRun };
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message;
+      set({ isGeneratingWorkflow: false, generationError: msg });
+      return { success: false, error: msg };
+    }
+  },
+
+  onNodesChange: (changes) => {
+    set((state) => ({
+      nodes: applyNodeChanges(changes, state.nodes)
+    }));
+  },
+
+  onEdgesChange: (changes) => {
+    set((state) => ({
+      edges: applyEdgeChanges(changes, state.edges)
+    }));
+  },
   
   setSelectedNodeId: (nodeId) => set({ selectedNodeId: nodeId }),
 
@@ -60,7 +108,8 @@ export const useWorkflowStore = create((set, get) => ({
       data: {
         label: `${nodeType.toUpperCase()} Node`,
         ...(nodeType === 'text' && { text: 'Sample text' }),
-        ...(nodeType === 'gemini' && { prompt: 'Process input text', model: 'gemini-flash-latest', maxRetries: 3, retryDelayMs: 1500 }),
+        ...(nodeType === 'gemini' && { prompt: 'Process input text', model: 'gemini-flash-latest', maxRetries: 1, retryDelayMs: 500 }),
+        ...(nodeType === 'ollama' && { prompt: 'Summarize: {{text_1.text}}', model: 'qwen3:1.7b', temperature: 0.7 }),
         ...(nodeType === 'api' && { url: 'https://jsonplaceholder.typicode.com/posts/1', method: 'GET' }),
         ...(nodeType === 'condition' && { leftValue: '{{text_1.text}}', operator: 'contains', rightValue: 'yes' }),
         ...(nodeType === 'embed' && { text: '{{pdf.text}}', chunkSize: 900 }),
@@ -139,6 +188,18 @@ export const useWorkflowStore = create((set, get) => ({
       set({ error: err.message, isSaving: false });
       return false;
     }
+  },
+
+  // Drops a workflow produced by the chat copilot onto the canvas. It is left
+  // unsaved (currentWorkflowId null) so "Save" creates a new workflow.
+  applyGeneratedWorkflow: (workflow) => {
+    set({
+      currentWorkflowId: null,
+      workflowName: workflow.name || 'AI Generated Workflow',
+      nodes: workflow.nodes || [],
+      edges: workflow.edges || [],
+      selectedNodeId: null
+    });
   },
 
   resetCanvas: () => {

@@ -1,29 +1,26 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useSceneStore } from '../scene/store/useSceneStore';
-import { WorkflowGraphScene } from '../scene/graph/WorkflowGraphScene';
-import { DemoCameraRig } from '../scene/graph/DemoCameraRig';
-import { WALKTHROUGH_START_POSE } from '../scene/graph/demoCameraPath';
+import { SystemScene } from '../scene/system/SystemScene';
+import { SystemCameraRig } from '../scene/system/SystemCameraRig';
+import { SYSTEM_START_POSE } from '../scene/system/systemCameraPath';
+import { SYSTEM_DESCRIPTION } from '../scene/system/systemData';
 import NodeNetwork from './NodeNetwork';
 import { ChevronDown } from 'lucide-react';
 
 const COPY = {
-  eyebrow: 'Live demo',
-  title: 'Chain AI models into pipelines. Visually.',
-  lede: 'Scroll to travel through the pipeline as it builds, node by node.'
+  eyebrow: 'The core system',
+  title: 'One engine. Every connection.',
+  lede: 'Scroll to travel through the nodes and explore the complete FlowForge network.'
 };
 
 const STEPS = [
-  { label: 'Input', end: 0.15 },
-  { label: 'PDF', end: 0.3 },
-  { label: 'Gemini AI', end: 0.45 },
-  { label: 'REST API', end: 0.525 },
-  { label: 'Delay Timer', end: 0.6 },
-  { label: 'Output', end: 0.75 },
+  { label: 'Core Engine', end: 0.08 },
+  { label: 'Connecting Nodes', end: 0.78 },
+  { label: 'Full System Live', end: 1.0 },
 ];
 
 function getCurrentStepIndex(progress) {
-  if (progress >= 0.75) return STEPS.length - 1;
   for (let i = 0; i < STEPS.length; i++) {
     if (progress < STEPS[i].end) return i;
   }
@@ -32,6 +29,7 @@ function getCurrentStepIndex(progress) {
 
 export default function LiveDemoSection() {
   const wrapperRef = useRef(null);
+  const pointerRef = useRef({ x: 0, y: 0 });
   const qualityTier = useSceneStore((state) => state.qualityTier);
   const reducedMotion = useSceneStore((state) => state.reducedMotion);
   const webglSupported = useSceneStore((state) => state.webglSupported);
@@ -57,6 +55,17 @@ export default function LiveDemoSection() {
     return () => window.removeEventListener('scroll', onScroll);
   }, [reducedMotion]);
 
+  // Subtle cursor parallax input, tracked window-wide since the canvas is pointer-events: none.
+  useEffect(() => {
+    if (reducedMotion) return;
+    const onMove = (e) => {
+      pointerRef.current.x = (e.clientX / window.innerWidth) * 2 - 1;
+      pointerRef.current.y = -((e.clientY / window.innerHeight) * 2 - 1);
+    };
+    window.addEventListener('mousemove', onMove, { passive: true });
+    return () => window.removeEventListener('mousemove', onMove);
+  }, [reducedMotion]);
+
   // Smoothly interpolate progress over animation frames
   useEffect(() => {
     if (reducedMotion) return;
@@ -75,15 +84,20 @@ export default function LiveDemoSection() {
 
   const progress = reducedMotion ? 1.0 : easedProgress;
   const dpr = qualityTier === 'high' ? [1, 2] : 1;
-  const execBoost = progress > 0.75 ? 1 + ((progress - 0.75) / 0.25) * 2.2 : 1.0;
   const currentStep = getCurrentStepIndex(progress);
 
   return (
-    <section ref={wrapperRef} id="interactive-demo" className="relative h-[270vh] bg-dark-900 border-b border-white/[0.04]">
+    <section
+      ref={wrapperRef}
+      id="interactive-demo"
+      className="relative h-[270vh]"
+      style={{ background: 'linear-gradient(180deg, #030923 0%, #061233 55%, #030923 100%)' }}
+    >
+      <span className="sr-only">{SYSTEM_DESCRIPTION}</span>
       <div className="sticky top-0 h-screen w-full flex flex-col justify-between overflow-hidden py-16">
         {/* Header Overlay */}
         <div className="relative z-10 max-w-3xl mx-auto px-4 text-center pointer-events-none">
-          <span className="text-xs font-bold uppercase tracking-widest text-brand-400 bg-brand-500/10 px-3 py-1 rounded-full border border-brand-500/20">
+          <span className="text-xs font-bold uppercase tracking-widest text-lp-400 bg-lp-500/10 px-3 py-1 rounded-full border border-lp-500/25">
             {COPY.eyebrow}
           </span>
           <h2 className="mt-4 text-2xl sm:text-4xl font-bold text-white tracking-tight">
@@ -95,24 +109,26 @@ export default function LiveDemoSection() {
         </div>
 
         {/* Bounded visual area */}
-        <div className="absolute inset-x-0 bottom-0 top-[220px] z-0 pointer-events-none flex items-center justify-center">
+        <div className="absolute inset-x-0 bottom-14 top-[220px] z-0 pointer-events-none flex items-center justify-center">
           {webglSupported ? (
             <Canvas
               dpr={dpr}
-              camera={{ position: WALKTHROUGH_START_POSE.position, fov: 42, near: 0.1, far: 20 }}
-              gl={{ antialias: false, alpha: true }}
+              flat
+              camera={{ position: SYSTEM_START_POSE.position, fov: 42, near: 0.1, far: 30 }}
+              gl={{ antialias: true, alpha: true }}
             >
-              <fog attach="fog" args={['#010204', 4, 14]} />
-              <ambientLight intensity={0.45} />
-              <directionalLight position={[2, 8, 4]} intensity={0.9} />
-              <pointLight position={[-4, 3, 2]} intensity={0.7} color="#a78bfa" />
-              <pointLight position={[4, -3, 2]} intensity={0.7} color="#60a5fa" />
+              <fog attach="fog" args={['#030923', 9, 22]} />
+              <ambientLight intensity={0.55} />
+              <directionalLight position={[3, 6, 4]} intensity={0.9} color="#ffffff" />
+              <directionalLight position={[-4, 3, -2]} intensity={0.45} color="#4d8cff" />
+              <directionalLight position={[0, 2, -5]} intensity={0.35} color="#7aa7ff" />
+              <pointLight position={[0, 1.2, 0]} intensity={1.4} color="#0059ff" distance={6} />
 
-              <WorkflowGraphScene progress={progress} reducedMotion={reducedMotion} execBoost={execBoost} />
-              <DemoCameraRig progress={progress} reducedMotion={reducedMotion} />
+              <SystemScene progress={progress} reducedMotion={reducedMotion} />
+              <SystemCameraRig progress={progress} reducedMotion={reducedMotion} pointerRef={pointerRef} />
             </Canvas>
           ) : (
-            <div className="w-[800px] h-[400px] max-w-full opacity-60">
+            <div className="w-[800px] h-[400px] max-w-full opacity-70">
               <NodeNetwork />
             </div>
           )}
@@ -121,7 +137,7 @@ export default function LiveDemoSection() {
         {/* Scroll invitation helper, replaced by the step indicator once scrolling starts */}
         {progress < 0.05 && !reducedMotion ? (
           <div className="relative z-10 flex flex-col items-center gap-1.5 text-xs font-mono text-slate-500 animate-bounce pointer-events-none pb-6">
-            <span>Scroll to build pipeline</span>
+            <span>Scroll to reveal the system</span>
             <ChevronDown className="w-4 h-4" />
           </div>
         ) : (
@@ -130,7 +146,7 @@ export default function LiveDemoSection() {
               <span key={step.label} className="flex items-center gap-1.5 sm:gap-2.5">
                 <span
                   className={`text-[10px] sm:text-[11px] font-mono tracking-wide transition-colors duration-300 ${
-                    i === currentStep ? 'text-sky-300 font-semibold' : i < currentStep ? 'text-slate-400' : 'text-slate-600'
+                    i === currentStep ? 'text-lp-400 font-semibold' : i < currentStep ? 'text-slate-400' : 'text-slate-600'
                   }`}
                 >
                   {String(i + 1).padStart(2, '0')} {step.label}

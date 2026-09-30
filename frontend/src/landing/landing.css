@@ -1,0 +1,316 @@
+/**
+ * Landing-page-only design layer.
+ *
+ * SCOPE LOCK: every rule here is namespaced under .lp-* or .lp-root and this
+ * file is imported by LandingPage.jsx alone. Nothing here can reach the login
+ * page, the dashboard, or the workflow builder — those keep the global tokens
+ * in tailwind.config.js / index.css untouched.
+ */
+
+.lp-root {
+  --lp-slab-radius: 2.5rem;
+  --lp-ink: #060c18;
+  --lp-ink-soft: #4c5a71;
+  --lp-paper: #f8fafc;
+  --lp-paper-edge: #e2e8f0;
+  
+  /* Primary Accent: Emerald / Neon Green to match reference */
+  --lp-accent: #10b981;
+  --lp-accent-glow: rgba(16, 185, 129, 0.4);
+  --lp-accent-soft: #34d399;
+
+  background: #050814;
+}
+
+/* Base custom font mapping if Outfit isn't loaded globally */
+.lp-root h1, .lp-root h2, .lp-root h3 {
+  font-family: 'Inter', sans-serif;
+}
+
+/* Oversized editorial numeral used to index steps and rows. */
+.lp-numeral {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.08);
+}
+.lp-slab--paper .lp-numeral { color: rgba(6, 12, 24, 0.08); }
+
+/* Large metric figure, the reference's "1.2K" treatment. */
+.lp-stat {
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 0.9;
+  background: linear-gradient(180deg, #ffffff, #a7f3d0);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Large rounded surface for oversized visual objects. */
+.lp-panel {
+  border-radius: 1.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: linear-gradient(165deg, rgba(10, 24, 48, 0.75), rgba(4, 8, 20, 0.92));
+  box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.95);
+}
+.lp-slab--paper .lp-panel {
+  background: #ffffff;
+  border-color: var(--lp-paper-edge);
+  box-shadow: 0 40px 90px -45px rgba(6, 12, 24, 0.25);
+}
+
+/* Recessed "before" surface — deliberately lower contrast than .lp-card */
+.lp-card--muted {
+  background: rgba(255, 255, 255, 0.015);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+.lp-card--muted:hover { transform: none; border-color: rgba(255, 255, 255, 0.08); background: rgba(255, 255, 255, 0.02); }
+
+/* Accent-lit surface for the resolved/"after" side of a comparison. */
+.lp-card--lit {
+  background: linear-gradient(160deg, rgba(16, 185, 129, 0.12), rgba(5, 15, 30, 0.65));
+  border-color: rgba(16, 185, 129, 0.35);
+  box-shadow: 0 30px 70px -35px rgba(16, 185, 129, 0.45);
+}
+
+/* Stacking Slabs (Overlay transition effect) */
+.lp-slab {
+  position: relative;
+  border-top-left-radius: var(--lp-slab-radius);
+  border-top-right-radius: var(--lp-slab-radius);
+  margin-top: calc(var(--lp-slab-radius) * -1);
+  isolation: isolate;
+}
+
+.lp-slab--dark {
+  background: #050811;
+  box-shadow: 0 -24px 60px -20px rgba(0, 0, 0, 0.85);
+}
+
+.lp-slab--paper {
+  background: var(--lp-paper);
+  color: var(--lp-ink);
+  box-shadow: 0 -24px 60px -20px rgba(0, 0, 0, 0.45);
+}
+
+.lp-slab--paper .lp-title { color: var(--lp-ink); }
+.lp-slab--paper .lp-lede,
+.lp-slab--paper .lp-body { color: var(--lp-ink-soft); }
+
+.lp-slab::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+}
+.lp-slab--paper::before { background: linear-gradient(90deg, transparent, rgba(6, 12, 24, 0.08), transparent); }
+
+/* Editorial text formats */
+.lp-display {
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 0.98;
+  text-wrap: balance;
+}
+
+.lp-title {
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  text-wrap: balance;
+  color: #ffffff;
+}
+
+.lp-lede {
+  color: #94a3b8;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+/* Card design architecture */
+.lp-card {
+  position: relative;
+  border-radius: 1.5rem;
+  padding: 1.75rem;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 420ms cubic-bezier(0.16, 1, 0.3, 1),
+              background 420ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lp-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(16, 185, 129, 0.45);
+  background: linear-gradient(160deg, rgba(16, 185, 129, 0.08), rgba(255, 255, 255, 0.015));
+  box-shadow: 0 20px 40px -20px rgba(16, 185, 129, 0.2);
+}
+
+.lp-slab--paper .lp-card {
+  background: #ffffff;
+  border-color: var(--lp-paper-edge);
+  box-shadow: 0 1px 2px rgba(6, 12, 24, 0.03);
+}
+.lp-slab--paper .lp-card:hover {
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: 0 18px 40px -18px rgba(6, 12, 24, 0.2);
+}
+
+/* Arrow indicator on cards */
+.lp-arrow {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  flex: none;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  transition: transform 380ms cubic-bezier(0.16, 1, 0.3, 1), background 380ms, border-color 380ms, color 380ms;
+}
+.lp-slab--paper .lp-arrow {
+  background: #ffffff;
+  border-color: var(--lp-paper-edge);
+  color: var(--lp-ink);
+}
+.lp-card:hover .lp-arrow {
+  transform: translate(2px, -2px);
+  background: var(--lp-accent);
+  border-color: var(--lp-accent);
+  color: #060c18;
+}
+
+/* Metadata pill badge */
+.lp-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  white-space: nowrap;
+}
+.lp-slab--paper .lp-pill { border-color: var(--lp-paper-edge); color: var(--lp-ink-soft); background: #ffffff; }
+
+/* Large pill action CTA bar */
+.lp-cta-bar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  border-radius: 999px;
+  padding: 1rem 2rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #060c18;
+  background: linear-gradient(90deg, #10b981, #34d399);
+  box-shadow: 0 16px 36px -12px rgba(16, 185, 129, 0.5);
+  transition: transform 380ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 380ms;
+}
+.lp-cta-bar:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 24px 48px -12px rgba(16, 185, 129, 0.65);
+}
+
+/* Floating animation structures */
+.lp-float-drift {
+  animation: lp-drift 7s ease-in-out infinite;
+}
+
+.lp-continuous-spin {
+  animation: lp-spin-slow 50s linear infinite;
+}
+
+@keyframes lp-drift {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+
+@keyframes lp-spin-slow {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Row elements inside steps/lists */
+.lp-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.15rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  transition: padding-left 380ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lp-slab--paper .lp-row { border-bottom-color: var(--lp-paper-edge); }
+.lp-row:hover { padding-left: 0.5rem; }
+.lp-row:last-child { border-bottom: 0; }
+
+/* Custom classes for Tab elements (Product Showcase) */
+.lp-tabs-container {
+  display: flex;
+  justify-content: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 2px;
+}
+
+.lp-tab-btn {
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #94a3b8;
+  border-bottom: 2px solid transparent;
+  transition: color 250ms, border-color 250ms;
+  background: transparent;
+}
+.lp-tab-btn:hover {
+  color: #ffffff;
+}
+.lp-tab-btn.active {
+  color: var(--lp-accent-soft);
+  border-bottom-color: var(--lp-accent);
+}
+
+/* Steps connector line (How It Works) */
+.lp-steps-connector {
+  position: absolute;
+  top: 2.25rem;
+  left: 3rem;
+  right: -3rem;
+  height: 2px;
+  border-top: 2px dashed rgba(6, 12, 24, 0.12);
+  z-index: 0;
+}
+
+/* Responsive constraints & media adjustments */
+@media (max-width: 1023px) {
+  .lp-steps-connector {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .lp-root { --lp-slab-radius: 1.75rem; }
+  .lp-card { padding: 1.35rem; }
+  .lp-float-drift { animation: none; }
+  .lp-continuous-spin { animation: none; }
+  .lp-row { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-float-drift { animation: none; }
+  .lp-continuous-spin { animation: none; }
+  .lp-card,
+  .lp-arrow,
+  .lp-cta-bar,
+  .lp-row { transition: none; }
+  .lp-card:hover,
+  .lp-cta-bar:hover { transform: none; }
+}
