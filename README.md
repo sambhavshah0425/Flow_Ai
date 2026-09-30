@@ -156,6 +156,11 @@ npm run dev:frontend
 
 ---
 
+### Windows: one-click start
+Double-click **`start-windows.bat`** in the project folder. It installs packages on first run, opens the backend and the website in two windows, and opens the app in your browser. Close those two windows to stop.
+
+---
+
 ## 🧩 Supported Node Catalog
 
 | Node Type | Icon | Inputs | Outputs | Description |
