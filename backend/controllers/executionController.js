@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Workflow } from '../models/Workflow.js';
 import { Execution } from '../models/Execution.js';
 import { Log } from '../models/Log.js';
@@ -22,7 +23,9 @@ export async function runWorkflow(req, res) {
 
     if (workflowId) {
       if (isDBConnected()) {
-        targetWorkflow = await Workflow.findOne({ _id: workflowId, userId });
+        if (mongoose.Types.ObjectId.isValid(String(workflowId))) {
+          targetWorkflow = await Workflow.findOne({ _id: workflowId, userId });
+        }
       } else {
         const memWf = memoryWorkflows.get(workflowId);
         // Only use it if it belongs to the requesting user
@@ -32,8 +35,8 @@ export async function runWorkflow(req, res) {
       }
     }
 
-    if (!targetWorkflow && workflowData) {
-      // Validate structural arrays for ad-hoc run
+    if (workflowData) {
+      // Validate structural arrays for ad-hoc or unsaved-edit run
       if (workflowData.nodes && !Array.isArray(workflowData.nodes)) {
         return res.status(400).json({ success: false, message: 'Workflow nodes must be an array.' });
       }
@@ -75,7 +78,13 @@ export async function runWorkflow(req, res) {
         }
       }
 
-      targetWorkflow = { ...workflowData, userId };
+      // Never trust a client-supplied _id unless ownership was verified above.
+      const { _id: _ignoredId, ...safeWorkflowData } = workflowData;
+      targetWorkflow = {
+        ...safeWorkflowData,
+        ...(targetWorkflow?._id ? { _id: targetWorkflow._id } : {}),
+        userId
+      };
     }
 
     if (!targetWorkflow || !targetWorkflow.nodes) {
@@ -105,18 +114,23 @@ export async function getUserExecutions(req, res) {
       return res.status(500).json({ success: false, message: 'Database service is currently unavailable.' });
     }
 
+    const memExecs = Array.from(memoryExecutions.values())
+      .filter((e) => String(e.userId) === String(userId))
+      .reverse();
+
     if (isDBConnected()) {
-      const executions = await Execution.find({ userId })
+      const dbExecs = await Execution.find({ userId })
         .populate('workflowId', 'name')
         .sort({ createdAt: -1 })
         .limit(50);
 
+      const executions = [...memExecs, ...dbExecs]
+        .sort((a, b) => new Date(b.startedAt || b.createdAt) - new Date(a.startedAt || a.createdAt))
+        .slice(0, 50);
+
       return res.status(200).json({ success: true, executions });
     } else {
-      const execs = Array.from(memoryExecutions.values())
-        .filter(e => String(e.userId) === String(userId))
-        .reverse();
-      return res.status(200).json({ success: true, executions: execs });
+      return res.status(200).json({ success: true, executions: memExecs.slice(0, 50) });
     }
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -132,7 +146,15 @@ export async function getExecutionById(req, res) {
       return res.status(500).json({ success: false, message: 'Database service is currently unavailable.' });
     }
 
-    if (isDBConnected()) {
+    const memExecution = memoryExecutions.get(id);
+    if (memExecution) {
+      if (String(memExecution.userId) !== String(userId)) {
+        return res.status(404).json({ success: false, message: 'Execution not found.' });
+      }
+      return res.status(200).json({ success: true, execution: memExecution, logs: memExecution.logs || [] });
+    }
+
+    if (isDBConnected() && mongoose.Types.ObjectId.isValid(String(id))) {
       const execution = await Execution.findOne({ _id: id, userId }).populate('workflowId', 'name');
       if (!execution) {
         return res.status(404).json({ success: false, message: 'Execution not found.' });
@@ -141,13 +163,9 @@ export async function getExecutionById(req, res) {
       const logs = await Log.find({ executionId: id }).sort({ timestamp: 1 });
 
       return res.status(200).json({ success: true, execution, logs });
-    } else {
-      const execution = memoryExecutions.get(id);
-      if (!execution || String(execution.userId) !== String(userId)) {
-        return res.status(404).json({ success: false, message: 'Execution not found.' });
-      }
-      return res.status(200).json({ success: true, execution, logs: execution.logs || [] });
     }
+
+    return res.status(404).json({ success: false, message: 'Execution not found.' });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }

@@ -1,104 +1,77 @@
 import React from 'react';
-import { motion } from 'framer-motion';
-import { MousePointerClick, PlusSquare, Link, Play, ArrowRight } from 'lucide-react';
-import { Link as RouterLink } from 'react-router-dom';
-import { Reveal } from './Reveal';
+import { Link } from 'react-router-dom';
+import { ArrowRight, ChatCircleDots, GitFork, Play } from '@phosphor-icons/react';
+import { RevealBlock } from './MotionPrimitives';
 
 const STEPS = [
   {
-    num: '1',
-    icon: MousePointerClick,
-    title: 'Add Trigger',
-    desc: 'Choose an event that starts your workflow.'
+    step: '01',
+    icon: ChatCircleDots,
+    title: 'Generate with Qwen or place nodes',
+    body: 'Ask Chat with Qwen to compose a full pipeline, use the prompt automator modal, or pick directly from 10 node handlers on the canvas.'
   },
   {
-    num: '2',
-    icon: PlusSquare,
-    title: 'Add Blocks',
-    desc: 'Drag and drop AI actions or tools.'
+    step: '02',
+    icon: GitFork,
+    title: 'Bind variables and encrypted secrets',
+    body: 'Pass upstream results cleanly using {{node_id.field}} templates and inject API or SMTP keys from the AES 256 GCM vault.'
   },
   {
-    num: '3',
-    icon: Link,
-    title: 'Connect',
-    desc: 'Link the blocks to define logic.'
-  },
-  {
-    num: '4',
+    step: '03',
     icon: Play,
-    title: 'Execute',
-    desc: 'Run and monitor your workflow in real time.'
+    title: 'Validate DAG and stream execution',
+    body: 'Run the graph to check for cycles, execute parallel dependency levels, monitor live Socket.IO logs, and download or email outputs.'
   }
 ];
 
 export function HowItWorksSection() {
   return (
-    <section 
-      id="how-it-works" 
-      aria-labelledby="how-heading" 
-      className="py-24 sm:py-32 relative overflow-hidden bg-slate-50 text-slate-900 border-t border-slate-200"
+    <section
+      id="how-it-works"
+      aria-labelledby="how-heading"
+      className="bg-[#181818] py-20 px-4 sm:px-6"
     >
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 relative z-10">
-        
-        {/* Section Heading */}
-        <div className="text-center mb-20">
-          <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1 mb-4">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-            HOW IT WORKS
-          </span>
-          <h2 id="how-heading" className="text-slate-900 text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight mt-2 max-w-2xl mx-auto leading-tight">
-            Build your workflow in 4 simple steps
-          </h2>
-        </div>
-
-        {/* Steps Grid */}
-        <div className="relative">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-10">
-            {STEPS.map((step, i) => {
-              const Icon = step.icon;
-              return (
-                <Reveal key={step.num} delay={i * 0.1} className="relative z-10 flex">
-                  <div className="flex flex-col items-center text-center p-6 bg-white border border-slate-200/80 rounded-2xl shadow-sm hover:shadow-md transition-all w-full group relative">
-                    
-                    {/* Dotted Connector line between steps on desktop */}
-                    {i < STEPS.length - 1 && (
-                      <div className="hidden lg:block absolute top-12 left-[60%] right-[-60%] h-[2px] border-t-2 border-dashed border-slate-200 group-hover:border-emerald-200 transition-colors pointer-events-none" />
-                    )}
-
-                    {/* Step Icon Container */}
-                    <div className="w-14 h-14 rounded-full bg-emerald-500/5 border border-emerald-500/10 text-emerald-600 flex items-center justify-center mb-6 shadow-inner group-hover:bg-emerald-500 group-hover:text-white transition-all duration-300">
-                      <Icon className="w-5 h-5" />
-                    </div>
-
-                    {/* Number + Title */}
-                    <h3 className="text-base font-bold text-slate-900 tracking-tight">
-                      {step.num}. {step.title}
-                    </h3>
-
-                    {/* Description */}
-                    <p className="mt-2 text-sm text-slate-500 leading-relaxed max-w-[200px]">
-                      {step.desc}
-                    </p>
-                  </div>
-                </Reveal>
-              );
-            })}
+      <div className="max-w-6xl mx-auto space-y-12">
+        <RevealBlock className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div className="space-y-4 max-w-[680px]">
+            <p className="caption-3 text-[#9B9B9B] uppercase tracking-wider">How it works</p>
+            <h2 id="how-heading" className="heading-2 text-white">
+              Three steps from prompt to live execution
+            </h2>
           </div>
-        </div>
 
-        {/* Try It Yourself CTA */}
-        <div className="text-center mt-16">
-          <RouterLink
+          <Link
             to="/login"
-            className="lp-cta-bar inline-flex items-center gap-2 text-sm font-bold bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 rounded-full px-8 py-4 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 shadow-lg shadow-emerald-500/20"
+            className="inline-flex items-center gap-2 py-2 px-3 rounded-lg bg-[#000000] border border-[#272727] hover:bg-[#1F1F1F] hover:border-[#313131] text-white button-sm lp-interactive focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white w-fit"
           >
-            <span>Try it Yourself</span>
-            <ArrowRight className="w-4 h-4" aria-hidden="true" />
-          </RouterLink>
-        </div>
+            <span>Open workflow builder</span>
+            <ArrowRight size={14} weight="bold" aria-hidden="true" />
+          </Link>
+        </RevealBlock>
 
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {STEPS.map((item, idx) => {
+            const Icon = item.icon;
+            return (
+              <RevealBlock key={item.step} delay={idx * 0.08}>
+                <article className="h-full bg-[#000000] border border-[#272727] rounded-2xl p-6 flex flex-col justify-between gap-8 hover:bg-[#1F1F1F] hover:border-[#313131] lp-interactive">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="w-10 h-10 rounded-lg bg-[#181818] border border-[#272727] text-white flex items-center justify-center shrink-0">
+                      <Icon size={20} weight="regular" aria-hidden="true" />
+                    </span>
+                    <span className="heading-5 lp-mono text-[#737373]">{item.step}</span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h3 className="heading-6 text-white">{item.title}</h3>
+                    <p className="body-6 text-[#9B9B9B]">{item.body}</p>
+                  </div>
+                </article>
+              </RevealBlock>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
 }
-export default HowItWorksSection;

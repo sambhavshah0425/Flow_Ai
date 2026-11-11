@@ -11,47 +11,71 @@ const WELCOME = {
 };
 
 let nextId = 1;
+let chatEpoch = 0;
+let activeController = null;
 const msg = (role, content, extra = {}) => ({ id: `m${nextId++}`, role, content, ...extra });
 
 export const useCopilotStore = create((set, get) => ({
   isOpen: false,
   messages: [WELCOME],
   isSending: false,
+  isCheckingStatus: false,
   status: null, // { online, model, modelInstalled } from /copilot/status
 
   open: async () => {
     set({ isOpen: true });
-    await get().checkStatus();
-    // Pre-load Qwen and its instructions while the user is still typing, so
-    // the first message doesn't pay the ~30-60s model-load + prompt-read cost.
-    const { status } = get();
-    if (status?.online && status?.modelInstalled) {
-      api.post('/copilot/warmup').catch(() => {});
-    }
+    await get().recheckConnection();
   },
   close: () => set({ isOpen: false }),
 
   checkStatus: async () => {
+    set({ isCheckingStatus: true });
     try {
       const res = await api.get('/copilot/status');
-      set({ status: res.data });
+      set({ status: res.data, isCheckingStatus: false });
+      return res.data;
     } catch {
-      set({ status: { online: false } });
+      const offline = { online: false, modelInstalled: false };
+      set({ status: offline, isCheckingStatus: false });
+      return offline;
     }
   },
 
-  resetChat: () => set({ messages: [WELCOME] }),
+  recheckConnection: async () => {
+    const status = await get().checkStatus();
+    // Pre-load Qwen and its instructions while the user is still typing, so
+    // the first message doesn't pay the ~30-60s model-load + prompt-read cost.
+    if (status?.online && status?.modelInstalled) {
+      api.post('/copilot/warmup').catch(() => {});
+    }
+    return status;
+  },
+
+  resetChat: () => {
+    chatEpoch += 1;
+    if (activeController) {
+      activeController.abort();
+      activeController = null;
+    }
+    set({ messages: [WELCOME], isSending: false });
+  },
 
   sendMessage: async (text) => {
     const content = text.trim();
     if (!content || get().isSending) return;
 
+    const epoch = chatEpoch;
+    const controller = new AbortController();
+    activeController = controller;
+
     const userMsg = msg('user', content);
     set((s) => ({ messages: [...s.messages, userMsg], isSending: true }));
 
     // Only real conversation turns go to the model (not the welcome text or error notices).
+    // Keep the most recent 12 turns to match the backend context window.
     const history = get().messages
       .filter((m) => !m.local && (m.role === 'user' || m.role === 'assistant'))
+      .slice(-12)
       .map((m) => ({ role: m.role, content: m.content }));
 
     const { workflowName, nodes, edges } = useWorkflowStore.getState();
@@ -60,7 +84,13 @@ export const useCopilotStore = create((set, get) => ({
     const currentWorkflow = isStarterCanvas(nodes) ? undefined : { name: workflowName, nodes, edges };
 
     try {
-      const res = await api.post('/copilot/chat', { messages: history, currentWorkflow });
+      const res = await api.post(
+        '/copilot/chat',
+        { messages: history, currentWorkflow },
+        { signal: controller.signal }
+      );
+      if (epoch !== chatEpoch) return;
+
       const { action, reply, workflow } = res.data;
 
       if (action === 'build' && workflow) {
@@ -73,11 +103,21 @@ export const useCopilotStore = create((set, get) => ({
         set((s) => ({ messages: [...s.messages, msg('assistant', reply)] }));
       }
     } catch (err) {
-      const message = err.response?.data?.message || err.message || 'Something went wrong.';
+      if (epoch !== chatEpoch || err.name === 'CanceledError' || err.code === 'ERR_CANCELED') {
+        return;
+      }
+      const message = err.response?.status === 401
+        ? 'Your session expired — please sign in again to keep chatting.'
+        : (err.response?.data?.message || err.message || 'Something went wrong.');
       set((s) => ({ messages: [...s.messages, msg('assistant', message, { error: true, local: true })] }));
       get().checkStatus();
     } finally {
-      set({ isSending: false });
+      if (activeController === controller) {
+        activeController = null;
+      }
+      if (epoch === chatEpoch) {
+        set({ isSending: false });
+      }
     }
   }
 }));

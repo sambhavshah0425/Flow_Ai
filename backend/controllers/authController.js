@@ -10,7 +10,7 @@ import { JWT_SECRET } from '../config/security.js';
 export const memoryRevokedTokens = new Set();
 
 // In-Memory store fallback when MongoDB daemon is not running locally
-const memoryUsers = new Map();
+export const memoryUsers = new Map();
 
 function generateToken(userId, email) {
   return jwt.sign({ userId, email }, JWT_SECRET, { expiresIn: '7d' });
@@ -39,10 +39,12 @@ export async function register(req, res) {
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
 
+      const now = new Date();
       const user = await User.create({
-        name,
+        name: name.trim(),
         email: normEmail,
-        password: hashedPassword
+        password: hashedPassword,
+        lastLoginAt: now
       });
 
       const token = generateToken(user._id, user.email);
@@ -54,7 +56,8 @@ export async function register(req, res) {
         user: {
           id: user._id,
           name: user.name,
-          email: user.email
+          email: user.email,
+          lastLoginAt: user.lastLoginAt
         }
       });
     } else {
@@ -120,6 +123,9 @@ export async function login(req, res) {
         return res.status(401).json({ success: false, message: 'Invalid credentials.' });
       }
 
+      user.lastLoginAt = new Date();
+      await user.save();
+
       const token = generateToken(user._id, user.email);
 
       return res.status(200).json({
@@ -129,7 +135,8 @@ export async function login(req, res) {
         user: {
           id: user._id,
           name: user.name,
-          email: user.email
+          email: user.email,
+          lastLoginAt: user.lastLoginAt
         }
       });
     } else {

@@ -1,5 +1,5 @@
 import { parseDAG } from '../execution/dagParser.js';
-import { ollamaChat } from '../utils/ollamaClient.js';
+import { ollamaChat, parseJsonResponse } from '../utils/ollamaClient.js';
 
 // SSRF Protection: Private / loopback hostnames and IP patterns
 const BLOCKED_HOST_PATTERNS = [
@@ -424,8 +424,8 @@ export function normalizeAndValidateWorkflow(rawWorkflow) {
 
   rawEdges.forEach((e, idx) => {
     if (!e || typeof e !== 'object') return;
-    const source = e.source?.toLowerCase();
-    const target = e.target?.toLowerCase();
+    const source = e.source?.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    const target = e.target?.toLowerCase().replace(/[^a-z0-9_]/g, '_');
 
     if (source && target && nodeMap.has(source) && nodeMap.has(target) && source !== target) {
       const edgeKey = `${source}->${target}`;
@@ -433,14 +433,18 @@ export function normalizeAndValidateWorkflow(rawWorkflow) {
         edgeSet.add(edgeKey);
         const sourceNode = nodeMap.get(source);
         const isCondition = sourceNode.type === 'condition';
+        const rawHandle = e.sourceHandle != null ? String(e.sourceHandle).trim().toLowerCase() : '';
+        const normalizedHandle = rawHandle === 'false' ? 'false' : 'true';
 
-        const branchColor = e.sourceHandle === 'true' ? '#34d399' : e.sourceHandle === 'false' ? '#f43f5e' : undefined;
+        const branchColor = isCondition
+          ? (normalizedHandle === 'true' ? '#34d399' : '#f43f5e')
+          : undefined;
 
         normalizedEdges.push({
           id: e.id || `e_${source}_to_${target}_${idx}`,
           source,
           target,
-          sourceHandle: isCondition ? (e.sourceHandle || 'true') : undefined,
+          sourceHandle: isCondition ? normalizedHandle : undefined,
           targetHandle: e.targetHandle || undefined,
           animated: true,
           type: 'smoothstep',
@@ -542,7 +546,11 @@ export async function generateWorkflowFromPrompt(req, res) {
         temperature: 0.2,
         timeoutMs: GENERATION_TIMEOUT_MS
       });
-      generatedWorkflow = normalizeAndValidateWorkflow(JSON.parse(result.text));
+      const parsedJson = parseJsonResponse(result.text);
+      if (!parsedJson) {
+        throw new Error('Model returned unparseable JSON.');
+      }
+      generatedWorkflow = normalizeAndValidateWorkflow(parsedJson);
     } catch (aiErr) {
       // Ollama offline, model not pulled, timeout, or an unusable workflow.
       console.warn(`[AI Workflow Gen] Local Qwen attempt failed (${aiErr.message}) -> Served via deterministic fallback.`);

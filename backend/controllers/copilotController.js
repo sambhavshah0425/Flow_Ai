@@ -1,4 +1,4 @@
-import { ollamaChat, ollamaStatus, ollamaWarmup } from '../utils/ollamaClient.js';
+import { ollamaChat, ollamaStatus, ollamaWarmup, parseJsonResponse } from '../utils/ollamaClient.js';
 import { normalizeAndValidateWorkflow } from './aiWorkflowController.js';
 import { parseDAG } from '../execution/dagParser.js';
 
@@ -21,13 +21,13 @@ export const SYSTEM_PROMPT = `You are FlowForge Copilot, the assistant inside a 
 You chat with the user, understand the automation they want, and build it as a workflow of connected nodes.
 
 Answer with JSON: {"action": "ask" | "build", "reply": "...", "workflow": {...}}
-- "build": "reply" = 1-2 friendly sentences saying what you built. Include the FULL workflow with EVERY step the user asked for.
-- "ask": only if the task is impossible without an answer. ONE short question in "reply", no workflow.
+- "build": "reply" = 1-2 friendly sentences saying what you built. Include the FULL workflow with EVERY step the user asked for (non-empty "nodes" array).
+- "ask": for greetings, general questions, workflow explanations, or when you need clarification. Reply naturally in "reply" and omit "workflow".
 
 Rules:
-- Prefer building. If the user says "build it", "go" or "just do it", build immediately.
-- Include every step of the request (e.g. "summarize and email" needs a pdf/text node, an ollama node AND an email node).
-- Only add the nodes the task needs. Do not add delay or download nodes unless the user asks for them.
+- Build only when the user asks to create, run, or change an automation (or says "build it" / "go"). For greetings or general questions, answer with action "ask" and omit "workflow".
+- Add only the exact steps the user asked for. An ollama node's output already displays to the user, so end at ollama unless another destination step was explicitly requested.
+- Input nodes ("text" and "pdf") only start a workflow.
 - If a current workflow is given and the user asks to change it, return the FULL updated workflow. For a new, unrelated request, ignore it and build a fresh one.
 
 Workflow format:
@@ -37,10 +37,10 @@ Workflow format:
 - Edges leaving a condition node need "sourceHandle": "true" or "false".
 
 Node types (data fields -> outputs other nodes can use):
-- text: {label, text} -> {{id.text}}. Fixed text or a user question.
+- text: {label, text} -> {{id.text}}. Input only: fixed text or a user question.
 - ollama: {label, prompt} -> {{id.text}}. Local AI. Use it for EVERY AI step: summarize, write, translate, classify, extract, answer.
 - api: {label, url, method} -> {{id.data}}, {{id.status}}. HTTP request.
-- pdf: {label, fileName} -> {{id.text}}. The user uploads the PDF on the canvas afterwards.
+- pdf: {label, fileName} -> {{id.text}}. Input only: the user uploads an existing PDF on the canvas afterwards.
 - embed: {label, text} -> indexes text so a retrieve node can search it.
 - retrieve: {label, query, topK} -> {{id.context}}. Finds relevant passages. Must come after an embed node.
 - condition: {label, leftValue, operator, rightValue}. operator: equals, not_equals, contains, not_contains, gt, lt, is_empty, is_not_empty. Branches "true"/"false".
@@ -48,14 +48,23 @@ Node types (data fields -> outputs other nodes can use):
 - delay: {label, delayMs}
 - download: {label, fileName, text}. Lets the user download text as a file.
 
-Example 1. User: "Summarize a PDF and email the summary to sam@x.com"
+Example 1. User: "Hi! What can you help me build?"
+{"action": "ask", "reply": "I can help you build AI workflows using local Qwen AI, APIs, PDFs, semantic search, conditions, email, and file downloads. What would you like to automate?"}
+
+Example 2. User: "Fetch a post from https://api.site/posts/1 and summarize it"
+{"action": "build", "reply": "Built it: fetches the post from the API and summarizes it with Qwen AI.", "workflow": {"name": "API Summary", "nodes": [
+ {"id": "api_1", "type": "api", "data": {"label": "Fetch post", "url": "https://api.site/posts/1", "method": "GET"}},
+ {"id": "ollama_1", "type": "ollama", "data": {"label": "Summarize", "prompt": "Summarize this payload:\\n\\n{{api_1.data}}"}}],
+ "edges": [{"source": "api_1", "target": "ollama_1"}]}}
+
+Example 3. User: "Summarize a PDF and email the summary to sam@x.com"
 {"action": "build", "reply": "Built it: your PDF is summarized by AI and emailed to sam@x.com. Upload the PDF, then press Run.", "workflow": {"name": "PDF Summary Email", "nodes": [
  {"id": "pdf_1", "type": "pdf", "data": {"label": "Your PDF", "fileName": "document.pdf"}},
  {"id": "ollama_1", "type": "ollama", "data": {"label": "Summarize", "prompt": "Summarize this document in 5 bullet points:\\n\\n{{pdf_1.text}}"}},
  {"id": "email_1", "type": "email", "data": {"label": "Email summary", "to": "sam@x.com", "subject": "PDF summary", "body": "{{ollama_1.text}}"}}],
  "edges": [{"source": "pdf_1", "target": "ollama_1"}, {"source": "ollama_1", "target": "email_1"}]}}
 
-Example 2. User: "Call https://api.site/health; if it returns 200 write a happy status note, otherwise write an alert"
+Example 4. User: "Call https://api.site/health; if it returns 200 write a happy status note, otherwise write an alert"
 {"action": "build", "reply": "Built it: the API is checked, and AI writes a status note or an alert depending on the result.", "workflow": {"name": "Health Check", "nodes": [
  {"id": "api_1", "type": "api", "data": {"label": "Health check", "url": "https://api.site/health", "method": "GET"}},
  {"id": "condition_1", "type": "condition", "data": {"label": "Is it 200?", "leftValue": "{{api_1.status}}", "operator": "equals", "rightValue": "200"}},
@@ -63,7 +72,7 @@ Example 2. User: "Call https://api.site/health; if it returns 200 write a happy 
  {"id": "ollama_2", "type": "ollama", "data": {"label": "Alert", "prompt": "Write a short alert: the health check returned {{api_1.status}}."}}],
  "edges": [{"source": "api_1", "target": "condition_1"}, {"source": "condition_1", "target": "ollama_1", "sourceHandle": "true"}, {"source": "condition_1", "target": "ollama_2", "sourceHandle": "false"}]}}
 
-Example 3. User: "Let me ask questions about a document"
+Example 5. User: "Let me ask questions about a document"
 {"action": "build", "reply": "Built it: upload your document and type your question in the Question node, then press Run.", "workflow": {"name": "Document Q&A", "nodes": [
  {"id": "pdf_1", "type": "pdf", "data": {"label": "Your document", "fileName": "document.pdf"}},
  {"id": "text_1", "type": "text", "data": {"label": "Question", "text": "What is this document about?"}},
@@ -114,7 +123,7 @@ export const RESPONSE_SCHEMA = {
   required: ['action', 'reply']
 };
 
-const MAX_MESSAGES = 20;
+const MAX_MESSAGES = 100;
 const MAX_MESSAGE_CHARS = 4000;
 const KEEP_HISTORY = 12;
 
@@ -162,6 +171,84 @@ export function summarizeCanvas(workflow) {
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 export const EMAIL_QUESTION = 'Which email address should I send it to?';
 
+const DEFAULT_OUTPUT_FIELD = {
+  api: 'data',
+  retrieve: 'context'
+};
+
+/**
+ * Small local models sometimes append an unrequested `text` node downstream
+ * of `ollama`/`email` ("to store the summary") or route `ollama -> text -> download`.
+ * Because `text` nodes perform no computation, drop leaf sinks and bypass
+ * pass-through `text` aliases while keeping genuine root `text` inputs untouched.
+ */
+export function stripRedundantTextSinks(workflow) {
+  let nodes = workflow.nodes.map((n) => ({ ...n, data: { ...(n.data || {}) } }));
+  let edges = workflow.edges.map((e) => ({ ...e }));
+
+  for (let step = 0; step < workflow.nodes.length && nodes.length > 1; step++) {
+    const nodeById = new Map(nodes.map((n) => [n.id, n]));
+    const target = nodes.find((n) => {
+      if (n.type !== 'text') return false;
+      const inEdges = edges.filter((e) => e.target === n.id);
+      if (inEdges.length === 0) return false;
+      const outEdges = edges.filter((e) => e.source === n.id);
+      if (outEdges.length > 0 && inEdges.length !== 1) return false;
+      const rawText = String(n.data.text ?? n.data.content ?? '').trim();
+      const fromCondition = inEdges.some((e) => nodeById.get(e.source)?.type === 'condition');
+      return !fromCondition || rawText === '' || rawText.includes('{{');
+    });
+
+    if (!target) break;
+
+    const inEdges = edges.filter((e) => e.target === target.id);
+    const outEdges = edges.filter((e) => e.source === target.id);
+
+    if (outEdges.length > 0) {
+      const srcEdge = inEdges[0];
+      const srcNode = nodeById.get(srcEdge.source);
+      const rawText = String(target.data.text ?? target.data.content ?? '').trim();
+      const defaultField = DEFAULT_OUTPUT_FIELD[srcNode?.type] || 'text';
+      const replacement = rawText.includes('{{') ? rawText : `{{${srcNode.id}.${defaultField}}}`;
+      const refRe = new RegExp(`\\{\\{\\s*${target.id}\\.(?:text|output|content)\\s*\\}\\}`, 'g');
+
+      for (const n of nodes) {
+        if (n.id === target.id) continue;
+        for (const [k, v] of Object.entries(n.data)) {
+          if (typeof v === 'string' && v.includes(target.id)) {
+            n.data[k] = v.replace(refRe, replacement);
+          }
+        }
+      }
+
+      const rewired = outEdges.map((outEdge) => ({
+        ...outEdge,
+        id: `e_${srcEdge.source}_to_${outEdge.target}`,
+        source: srcEdge.source,
+        target: outEdge.target,
+        sourceHandle: srcEdge.sourceHandle,
+        ...(srcEdge.style ? { style: srcEdge.style } : {})
+      }));
+      const seen = new Set();
+      edges = [
+        ...edges.filter((e) => e.source !== target.id && e.target !== target.id),
+        ...rewired
+      ].filter((e) => {
+        const key = `${e.source}|${e.target}|${e.sourceHandle || ''}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    } else {
+      edges = edges.filter((e) => e.target !== target.id);
+    }
+
+    nodes = nodes.filter((n) => n.id !== target.id);
+  }
+
+  return { ...workflow, nodes, edges };
+}
+
 /**
  * Small models happily invent recipients like "user@example.com". This check
  * does not trust the model: an email node may only target an address the user
@@ -196,15 +283,6 @@ export function checkEmailRecipients(workflow, messages, currentWorkflow) {
     }
   }
   return 'ok';
-}
-
-function parseModelJson(text) {
-  const cleaned = String(text || '').replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    return null;
-  }
 }
 
 /** GET /api/copilot/status — is Ollama running and is the model pulled? */
@@ -268,8 +346,9 @@ export async function copilotChat(req, res) {
     return res.status(503).json({ success: false, message: err.message });
   }
 
-  const parsed = parseModelJson(result.text);
-  if (!parsed || typeof parsed.reply !== 'string') {
+  const parsed = parseJsonResponse(result.text);
+  const replyText = typeof parsed?.reply === 'string' ? parsed.reply.trim() : '';
+  if (!parsed || !replyText) {
     return res.status(200).json({
       success: true,
       action: 'ask',
@@ -278,24 +357,26 @@ export async function copilotChat(req, res) {
     });
   }
 
-  if (parsed.action !== 'build' || !parsed.workflow) {
-    return res.status(200).json({ success: true, action: 'ask', reply: parsed.reply, model: result.model });
+  const hasNodes = Array.isArray(parsed.workflow?.nodes) && parsed.workflow.nodes.length > 0;
+  const isQuestionOnlyReply = replyText.endsWith('?') && !/\b(built|created|updated|added|wired|modified)\b/i.test(replyText);
+  if (parsed.action !== 'build' || !parsed.workflow || isQuestionOnlyReply || (!hasNodes && !/\bbuilt\b/i.test(replyText))) {
+    return res.status(200).json({ success: true, action: 'ask', reply: replyText, model: result.model });
   }
 
   try {
-    const normalized = normalizeAndValidateWorkflow(parsed.workflow);
+    const cleaned = stripRedundantTextSinks(normalizeAndValidateWorkflow(parsed.workflow));
 
-    if (checkEmailRecipients(normalized, messages, currentWorkflow) === 'ask') {
+    if (checkEmailRecipients(cleaned, messages, currentWorkflow) === 'ask') {
       return res.status(200).json({ success: true, action: 'ask', reply: EMAIL_QUESTION, model: result.model });
     }
-    const missingRecipient = normalized.nodes.some((n) => n.type === 'email' && !n.data.to);
+    const missingRecipient = cleaned.nodes.some((n) => n.type === 'email' && !n.data.to);
 
-    const nodes = autoLayout(normalized.nodes, normalized.edges);
+    const nodes = autoLayout(cleaned.nodes, cleaned.edges);
     return res.status(200).json({
       success: true,
       action: 'build',
-      reply: missingRecipient ? `${parsed.reply} (Add the recipient's address in the Email node.)` : parsed.reply,
-      workflow: { name: normalized.name, description: normalized.description, nodes, edges: normalized.edges },
+      reply: missingRecipient ? `${replyText} (Add the recipient's address in the Email node.)` : replyText,
+      workflow: { name: cleaned.name, description: cleaned.description, nodes, edges: cleaned.edges },
       model: result.model
     });
   } catch (err) {

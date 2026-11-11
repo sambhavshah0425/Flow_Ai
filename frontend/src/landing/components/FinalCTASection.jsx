@@ -1,87 +1,55 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
-import { motion, useScroll, useTransform, useReducedMotion } from 'framer-motion';
-import { ArrowRight } from 'lucide-react';
-import { Reveal } from './Reveal';
-
-const COPY = {
-  title: 'Ready to Build Smarter?',
-  body: 'Join thousands of developers and builders automating the future with FlowForge OS.',
-  primaryCta: 'Start Building Free'
-};
+import { ArrowRight, CheckCircle } from '@phosphor-icons/react';
+import { RevealBlock } from './MotionPrimitives';
 
 export function FinalCTASection() {
-  const containerRef = useRef(null);
-  const reduceMotion = useReducedMotion();
-
-  // Scroll parallax mapping
-  const { scrollYProgress } = useScroll({
-    target: containerRef,
-    offset: ["start end", "end start"]
-  });
-
-  const orbParallaxY = useTransform(scrollYProgress, [0, 1], [-20, 20]);
-
   return (
-    <section 
-      ref={containerRef}
+    <section
       id="final-cta"
-      aria-labelledby="final-cta-heading" 
-      className="py-20 sm:py-28 relative overflow-hidden bg-[#040810] text-slate-100 border-t border-white/[0.05]"
+      aria-labelledby="final-cta-heading"
+      className="bg-[#181818] py-20 px-4 sm:px-6"
     >
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 relative z-10">
-        
-        {/* Outlined Rounded container matching the visual pattern */}
-        <div className="border border-white/[0.08] bg-[#070e1a]/50 p-8 sm:p-12 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
-          
-          {/* Subtle glow background */}
-          <div className="absolute right-[-10%] top-[-10%] w-[320px] h-[320px] rounded-full bg-emerald-500/10 blur-[80px] pointer-events-none" />
-
-          <div className="grid lg:grid-cols-12 gap-8 items-center">
-            
-            {/* Copy column */}
-            <div className="lg:col-span-7 space-y-6">
-              <h2 id="final-cta-heading" className="lp-title text-white text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight">
-                {COPY.title}
+      <div className="max-w-6xl mx-auto">
+        <RevealBlock>
+          <div className="bg-[#000000] border border-[#272727] rounded-3xl p-8 sm:p-12 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+            <div className="space-y-4 max-w-[680px]">
+              <p className="caption-3 text-[#9B9B9B] uppercase tracking-wider">Ready to run locally</p>
+              <h2 id="final-cta-heading" className="heading-2 text-white">
+                Build your first DAG workflow in minutes
               </h2>
-              <p className="text-slate-400 text-sm sm:text-base leading-relaxed max-w-md">
-                {COPY.body}
+              <p className="body-3 text-[#9B9B9B]">
+                Launch the studio locally under the MIT license. Connect Ollama for private Qwen execution, or test graphs right away in In Memory mode.
               </p>
-              
-              <div className="pt-2">
-                <Link
-                  to="/login"
-                  className="lp-cta-bar inline-flex items-center gap-2 text-sm font-bold bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 rounded-full px-8 py-4 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 shadow-lg shadow-emerald-500/20"
-                >
-                  <span>{COPY.primaryCta}</span>
-                  <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                </Link>
+
+              <div className="flex flex-wrap items-center gap-4 pt-2">
+                <span className="inline-flex items-center gap-2 caption-4 text-white">
+                  <CheckCircle size={14} weight="fill" className="text-emerald-400" aria-hidden="true" />
+                  <span>No credit card required</span>
+                </span>
+                <span className="inline-flex items-center gap-2 caption-4 text-white">
+                  <CheckCircle size={14} weight="fill" className="text-emerald-400" aria-hidden="true" />
+                  <span>Zero external AI keys</span>
+                </span>
+                <span className="inline-flex items-center gap-2 caption-4 text-white">
+                  <CheckCircle size={14} weight="fill" className="text-emerald-400" aria-hidden="true" />
+                  <span>MIT licensed codebase</span>
+                </span>
               </div>
             </div>
 
-            {/* Orb centerpiece Column */}
-            <div className="lg:col-span-5 flex justify-center lg:justify-end">
-              <motion.div 
-                style={{ y: reduceMotion ? 0 : orbParallaxY }}
-                className="w-44 h-44 relative flex items-center justify-center pointer-events-none select-none"
+            <div className="shrink-0">
+              <Link
+                to="/login"
+                className="inline-flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-white text-black hover:bg-[#E5E5E5] button-md lp-interactive focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
-                <div className={reduceMotion ? "" : "lp-float-drift w-full h-full flex items-center justify-center"}>
-                  <img
-                    src="/green-metallic-orb.png"
-                    alt="Spinning green metallic core orb"
-                    style={{ mixBlendMode: 'screen', filter: 'drop-shadow(0 15px 35px rgba(16,185,129,0.15))' }}
-                    className={`${reduceMotion ? "" : "lp-continuous-spin"} w-full h-full object-contain pointer-events-none select-none`}
-                  />
-                </div>
-              </motion.div>
+                <span>Start local studio</span>
+                <ArrowRight size={16} weight="bold" aria-hidden="true" />
+              </Link>
             </div>
-
           </div>
-
-        </div>
-
+        </RevealBlock>
       </div>
     </section>
   );
 }
-export default FinalCTASection;

@@ -1,4 +1,5 @@
 import { parseDAG } from './dagParser.js';
+import mongoose from 'mongoose';
 import { ExecutionContext } from './executionContext.js';
 import { nodeRegistry } from './nodeRegistry.js';
 import { registerDefaultHandlers } from './nodeHandlers/index.js';
@@ -11,8 +12,9 @@ import { isDBConnected } from '../config/db.js';
 // Ensure standard handlers are registered
 registerDefaultHandlers();
 
-// In-Memory store for executions when DB is offline
+// In-Memory store for executions when DB is offline or running an unsaved canvas
 export const memoryExecutions = new Map();
+let memorySeq = 0;
 
 // Executions whose record has been created but which are waiting for the client
 // to join their Socket.IO room and fire `start_execution` before running.
@@ -20,30 +22,35 @@ export const memoryExecutions = new Map();
 export const pendingExecutions = new Map();
 
 /**
- * Create the execution record (DB when connected, otherwise in-memory) and
- * return its id. Shared by the direct-run and streamed (prepared) paths.
+ * Create the execution record (DB when connected for a persisted workflow,
+ * otherwise in-memory) and return its id. Shared by direct and streamed runs.
  */
 async function createExecutionRecord(workflow, workflowId, userId, status) {
   let executionId;
   let dbExecutionRecord = null;
 
   const userIdStr = userId ? userId.toString() : '';
-  if (isDBConnected() && userIdStr.length === 24) {
+  const workflowIdStr = workflowId ? workflowId.toString() : '';
+  if (
+    isDBConnected() &&
+    mongoose.Types.ObjectId.isValid(userIdStr) &&
+    mongoose.Types.ObjectId.isValid(workflowIdStr)
+  ) {
     try {
       dbExecutionRecord = await Execution.create({
-        workflowId,
+        workflowId: workflowIdStr,
         userId: userIdStr,
         status,
         startedAt: new Date()
       });
       executionId = dbExecutionRecord._id.toString();
-    } catch (err) {
-      executionId = `exec_${Date.now()}`;
+    } catch {
+      executionId = null;
     }
   }
 
   if (!executionId) {
-    executionId = `exec_${Date.now()}`;
+    executionId = `exec_${Date.now()}_${++memorySeq}`;
     memoryExecutions.set(executionId, {
       _id: executionId,
       id: executionId,
@@ -131,7 +138,7 @@ export async function executeWorkflow(workflow, userId, prepared = null) {
     if (isDBConnected() && dbExecutionRecord) {
       try {
         await Execution.findByIdAndUpdate(executionId, { status: 'running' });
-      } catch {}
+      } catch { }
     } else {
       const memExec = memoryExecutions.get(executionId);
       if (memExec) memExec.status = 'running';
@@ -250,7 +257,7 @@ export async function executeWorkflow(workflow, userId, prepared = null) {
         );
 
         if (isDBConnected() && dbExecutionRecord) {
-          try { await Log.create(logEntry); } catch {}
+          try { await Log.create(logEntry); } catch { }
         }
 
         emitExecutionEvent(executionId, 'node.completed', {
@@ -278,7 +285,7 @@ export async function executeWorkflow(workflow, userId, prepared = null) {
             durationMs: nodeDurationMs,
             timestamp: new Date().toISOString()
           });
-        } catch {}
+        } catch { }
       }
 
       emitExecutionEvent(executionId, 'node.failed', {
@@ -346,7 +353,7 @@ export async function executeWorkflow(workflow, userId, prepared = null) {
           metrics: context.metrics,
           error: workflowError
         });
-      } catch {}
+      } catch { }
     } else {
       const memExec = memoryExecutions.get(executionId);
       if (memExec) {
@@ -379,7 +386,7 @@ export async function executeWorkflow(workflow, userId, prepared = null) {
         metrics: context.metrics,
         contextOutputs: context.nodeOutputs
       });
-    } catch {}
+    } catch { }
   } else {
     const memExec = memoryExecutions.get(executionId);
     if (memExec) {
@@ -410,14 +417,18 @@ export async function executeWorkflow(workflow, userId, prepared = null) {
 export async function authorizeExecutionUser(executionId, userId) {
   try {
     if (!executionId || !userId) return false;
-    
-    if (isDBConnected()) {
-      const execution = await Execution.findById(executionId);
-      return execution && String(execution.userId) === String(userId);
-    } else {
-      const exec = memoryExecutions.get(executionId) || pendingExecutions.get(executionId);
-      return exec && String(exec.userId) === String(userId);
+
+    const memExec = memoryExecutions.get(executionId) || pendingExecutions.get(executionId);
+    if (memExec) {
+      return String(memExec.userId) === String(userId);
     }
+
+    if (isDBConnected() && mongoose.Types.ObjectId.isValid(String(executionId))) {
+      const execution = await Execution.findById(executionId);
+      return Boolean(execution && String(execution.userId) === String(userId));
+    }
+
+    return false;
   } catch (error) {
     console.error(`[Execution Auth Error] Failed to authorize execution ${executionId} for user ${userId}:`, error.message);
     return false;

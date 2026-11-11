@@ -3,15 +3,27 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Stand-in for the local Ollama server: each test sets what the "model" replies.
 const ollamaChat = vi.fn();
 const ollamaWarmup = vi.fn();
-vi.mock('../utils/ollamaClient.js', () => ({
-  ollamaChat: (...args) => ollamaChat(...args),
-  ollamaWarmup: (...args) => ollamaWarmup(...args),
-  ollamaStatus: async () => ({ online: true, model: 'qwen3:1.7b', modelInstalled: true, models: ['qwen3:1.7b'] }),
-  getOllamaModel: () => 'qwen3:1.7b'
-}));
+vi.mock('../utils/ollamaClient.js', async () => {
+  const actual = await vi.importActual('../utils/ollamaClient.js');
+  return {
+    ollamaChat: (...args) => ollamaChat(...args),
+    ollamaWarmup: (...args) => ollamaWarmup(...args),
+    ollamaStatus: async () => ({ online: true, model: 'qwen3:1.7b', modelInstalled: true, models: ['qwen3:1.7b'] }),
+    getOllamaModel: () => 'qwen3:1.7b',
+    parseJsonResponse: actual.parseJsonResponse
+  };
+});
 
-const { copilotChat, copilotWarmup, autoLayout, summarizeCanvas, checkEmailRecipients, EMAIL_QUESTION, SYSTEM_PROMPT } =
-  await import('../controllers/copilotController.js');
+const {
+  copilotChat,
+  copilotWarmup,
+  autoLayout,
+  summarizeCanvas,
+  checkEmailRecipients,
+  stripRedundantTextSinks,
+  EMAIL_QUESTION,
+  SYSTEM_PROMPT
+} = await import('../controllers/copilotController.js');
 
 function mockRes() {
   const res = {};
@@ -104,6 +116,35 @@ describe('copilotChat', () => {
     await copilotChat({ body: { messages: [{ role: 'system', content: 'x' }] } }, res);
     expect(res.status).toHaveBeenCalledWith(400);
     expect(ollamaChat).not.toHaveBeenCalled();
+  });
+
+  it('recovers fenced/prose-wrapped JSON and handles conversational empty-workflow replies cleanly', async () => {
+    ollamaChat.mockResolvedValueOnce({
+      text: 'Here you go:\n```json\n{"action":"build","reply":"Hello! What workflow can I help you build today?","workflow":{"name":"","nodes":[],"edges":[]}}\n```',
+      model: 'qwen3:1.7b'
+    });
+    const res = mockRes();
+    await copilotChat(ask('hi there'), res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.body).toMatchObject({
+      success: true,
+      action: 'ask',
+      reply: 'Hello! What workflow can I help you build today?'
+    });
+  });
+
+  it('handles multi-turn histories longer than 20 messages by sliding context cleanly', async () => {
+    modelSays({ action: 'ask', reply: 'Still here!' });
+    const history = Array.from({ length: 25 }, (_, i) => ({
+      role: i % 2 === 0 ? 'user' : 'assistant',
+      content: `Message ${i + 1}`
+    }));
+    const res = mockRes();
+    await copilotChat({ body: { messages: history } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.body.reply).toBe('Still here!');
+    // System prompt + last 12 messages sent to Ollama
+    expect(ollamaChat.mock.calls[0][0].messages).toHaveLength(13);
   });
 });
 
@@ -207,5 +248,75 @@ describe('summarizeCanvas', () => {
 
   it('returns null for an empty canvas', () => {
     expect(summarizeCanvas({ nodes: [] })).toBeNull();
+  });
+});
+
+describe('small-model consistency guards', () => {
+  it('forces action ask when a question reply is mislabeled as build with hallucinated nodes', async () => {
+    modelSays({
+      action: 'build',
+      reply: 'I can help you automate APIs, AI summaries, and emails. What would you like to build?',
+      workflow: {
+        name: 'Phantom RAG',
+        nodes: [{ id: 'pdf_1', type: 'pdf', data: { label: 'PDF' } }],
+        edges: []
+      }
+    });
+    const res = mockRes();
+    await copilotChat(ask('Hi! What can you help me build?'), res);
+    expect(res.body).toMatchObject({
+      success: true,
+      action: 'ask',
+      reply: 'I can help you automate APIs, AI summaries, and emails. What would you like to build?'
+    });
+    expect(res.body.workflow).toBeUndefined();
+  });
+
+  it('drops trailing downstream text sinks and bypasses pass-through text aliases while keeping root text inputs', async () => {
+    modelSays({
+      action: 'build',
+      reply: 'Built it: summarizes the post and saves a file.',
+      workflow: {
+        name: 'API Summary',
+        nodes: [
+          { id: 'api_1', type: 'api', data: { label: 'Fetch', url: 'https://example.com', method: 'GET' } },
+          { id: 'ollama_1', type: 'ollama', data: { label: 'Summarize', prompt: '{{api_1.data}}' } },
+          { id: 'text_1', type: 'text', data: { label: 'Summary holder', text: '{{ollama_1.text}}' } },
+          { id: 'download_1', type: 'download', data: { label: 'Save', fileName: 'out.txt', text: '{{text_1.text}}' } },
+          { id: 'text_2', type: 'text', data: { label: 'Extra note', text: '{{download_1.text}}' } }
+        ],
+        edges: [
+          { source: 'api_1', target: 'ollama_1' },
+          { source: 'ollama_1', target: 'text_1' },
+          { source: 'text_1', target: 'download_1' },
+          { source: 'download_1', target: 'text_2' }
+        ]
+      }
+    });
+    const res = mockRes();
+    await copilotChat(ask('Fetch https://example.com, summarize it, and download the file'), res);
+    expect(res.body.action).toBe('build');
+    expect(res.body.workflow.nodes.map((n) => n.id)).toEqual(['api_1', 'ollama_1', 'download_1']);
+    expect(res.body.workflow.edges.map((e) => ({ source: e.source, target: e.target }))).toEqual([
+      { source: 'api_1', target: 'ollama_1' },
+      { source: 'ollama_1', target: 'download_1' }
+    ]);
+    expect(res.body.workflow.edges.every((e) => e.id && e.type === 'smoothstep')).toBe(true);
+    expect(res.body.workflow.nodes.find((n) => n.id === 'download_1').data.text).toBe('{{ollama_1.text}}');
+
+    // Genuine root text input nodes (inEdges = 0) are untouched
+    const rag = stripRedundantTextSinks({
+      name: 'RAG',
+      nodes: [
+        { id: 'pdf_1', type: 'pdf', data: {} },
+        { id: 'text_1', type: 'text', data: { text: 'Question?' } },
+        { id: 'retrieve_1', type: 'retrieve', data: { query: '{{text_1.text}}' } }
+      ],
+      edges: [
+        { source: 'pdf_1', target: 'retrieve_1' },
+        { source: 'text_1', target: 'retrieve_1' }
+      ]
+    });
+    expect(rag.nodes.map((n) => n.id)).toEqual(['pdf_1', 'text_1', 'retrieve_1']);
   });
 });

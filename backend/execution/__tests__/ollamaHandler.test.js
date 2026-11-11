@@ -45,6 +45,22 @@ describe('ollamaHandler', () => {
   it('fails clearly on an empty prompt', async () => {
     await expect(ollamaHandler({ id: 'o', data: { prompt: '  ' } }, ctx())).rejects.toThrow(/prompt is empty/);
   });
+
+  it('retries without think flag if Ollama returns HTTP 400 rejecting thinking mode', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 400, text: async () => '{"error":"qwen2.5:1.5b does not support think"}' })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ model: 'qwen2.5:1.5b', message: { content: 'Recovered cleanly' }, prompt_eval_count: 10, eval_count: 3 })
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const out = await ollamaHandler({ id: 'o', data: { prompt: 'hi', model: 'qwen2.5:1.5b' } }, ctx());
+    expect(out.text).toBe('Recovered cleanly');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).think).toBe(false);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).think).toBeUndefined();
+  });
 });
 
 describe('legacy gemini nodes', () => {

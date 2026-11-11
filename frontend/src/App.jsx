@@ -4,6 +4,7 @@ import { useAuthStore } from './store/useAuthStore';
 import { Navbar } from './components/Navbar';
 import { SecretsModal } from './components/SecretsModal';
 import { LandingPage } from './landing/LandingPage';
+import { PrivacyPage, TermsPage, NotFoundPage } from './landing/LegalPages';
 
 // App pages are code-split so the public landing page at "/" doesn't pull in
 // the whole builder bundle (React Flow etc.) on first load.
@@ -24,13 +25,16 @@ function ProtectedRoute({ children }) {
   return isAuthenticated ? children : <Navigate to="/login" replace />;
 }
 
-// The landing page at "/" is a standalone marketing page — it brings its own
-// navbar/footer, so the in-app chrome is hidden there.
+const PUBLIC_MARKETING_ROUTES = new Set(['/', '/privacy', '/terms']);
+
+// Public marketing & legal pages bring their own layout/navigation, while the
+// authenticated product shell renders the in-app Navbar and SecretsModal.
 function AppShell() {
   const { checkAuth } = useAuthStore();
   const [secretsOpen, setSecretsOpen] = useState(false);
   const location = useLocation();
-  const isLanding = location.pathname === '/';
+  const isPublicMarketing = PUBLIC_MARKETING_ROUTES.has(location.pathname);
+  const isAppRoute = ['/login', '/dashboard', '/builder'].includes(location.pathname);
 
   useEffect(() => {
     checkAuth();
@@ -38,12 +42,14 @@ function AppShell() {
 
   return (
     <div className="min-h-screen bg-dark-900 text-slate-100 font-sans flex flex-col">
-      {!isLanding && <Navbar onOpenSecrets={() => setSecretsOpen(true)} />}
+      {!isPublicMarketing && isAppRoute && <Navbar onOpenSecrets={() => setSecretsOpen(true)} />}
 
       <div className="flex-1">
         <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
           <Route path="/login" element={<AuthPage />} />
           <Route
             path="/dashboard"
@@ -61,12 +67,12 @@ function AppShell() {
               </ProtectedRoute>
             }
           />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
         </Suspense>
       </div>
 
-      {!isLanding && <SecretsModal isOpen={secretsOpen} onClose={() => setSecretsOpen(false)} />}
+      {!isPublicMarketing && isAppRoute && <SecretsModal isOpen={secretsOpen} onClose={() => setSecretsOpen(false)} />}
     </div>
   );
 }

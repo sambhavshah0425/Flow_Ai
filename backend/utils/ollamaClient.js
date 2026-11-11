@@ -17,9 +17,40 @@ export function getOllamaModel() {
   return process.env.OLLAMA_MODEL || DEFAULT_MODEL;
 }
 
-// Qwen3 can emit a <think>...</think> reasoning block before its answer.
+// Qwen3 can emit a <think>...</think> reasoning block (or an unclosed <think> if truncated).
 function stripThinking(text) {
-  return String(text || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  return String(text || '')
+    .replace(/<think>[\s\S]*?<\/think>/g, '')
+    .replace(/<think>[\s\S]*$/g, '')
+    .trim();
+}
+
+/**
+ * Parse a JSON object from model output, tolerating markdown code fences or
+ * stray leading/trailing prose around a JSON object.
+ */
+export function parseJsonResponse(text) {
+  const cleaned = stripThinking(text)
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .trim();
+  if (!cleaned) return null;
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    // Recover an embedded JSON object if prose wrapped it.
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      try {
+        return JSON.parse(cleaned.slice(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
 }
 
 function offlineError(baseUrl) {
@@ -40,48 +71,70 @@ function offlineError(baseUrl) {
  * @param {number}  [opts.numCtx]      context window; Ollama's default is small
  * @param {number}  [opts.timeoutMs]   local CPU models can be slow
  */
+/**
+ * Post to Ollama's /api/chat endpoint, retrying without `think: false` if an
+ * older Ollama server or non-thinking model rejects that field with HTTP 400.
+ */
+async function postChatPayload(baseUrl, payload, timeoutMs) {
+  const send = async (includeThink) => {
+    try {
+      return await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(timeoutMs),
+        body: JSON.stringify({
+          ...payload,
+          ...(includeThink ? { think: false } : {})
+        })
+      });
+    } catch (err) {
+      if (err.name === 'TimeoutError') {
+        throw new Error(`Ollama model "${payload.model}" did not respond within ${Math.round(timeoutMs / 1000)}s.`);
+      }
+      throw offlineError(baseUrl);
+    }
+  };
+
+  let res = await send(true);
+  if (!res.ok) {
+    let body = await res.text().catch(() => '');
+    if (res.status === 400 && /think/i.test(body)) {
+      res = await send(false);
+      if (!res.ok) {
+        body = await res.text().catch(() => '');
+      }
+    }
+    if (!res.ok) {
+      if (res.status === 404 || /not found/i.test(body)) {
+        throw new Error(`Model "${payload.model}" is not installed in Ollama. Run: ollama pull ${payload.model}`);
+      }
+      throw new Error(`Ollama error ${res.status}: ${body.slice(0, 300)}`);
+    }
+  }
+  return res.json();
+}
+
 export async function ollamaChat({
   messages,
   model = getOllamaModel(),
   format,
   temperature = 0.3,
-  numCtx = 8192,
+  numCtx = 4096,
   timeoutMs = 180000
 }) {
-  const baseUrl = getOllamaBaseUrl();
+  const data = await postChatPayload(
+    getOllamaBaseUrl(),
+    {
+      model,
+      messages,
+      stream: false,
+      keep_alive: '30m', // keep the model in RAM between messages (reloading is slow)
+      ...(format && { format }),
+      options: { temperature, num_ctx: numCtx }
+    },
+    timeoutMs
+  );
 
-  let res;
-  try {
-    res = await fetch(`${baseUrl}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(timeoutMs),
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: false,
-        think: false, // skip Qwen3's slow "thinking" mode
-        keep_alive: '30m', // keep the model in RAM between messages (reloading is slow)
-        ...(format && { format }),
-        options: { temperature, num_ctx: numCtx }
-      })
-    });
-  } catch (err) {
-    if (err.name === 'TimeoutError') {
-      throw new Error(`Ollama model "${model}" did not respond within ${Math.round(timeoutMs / 1000)}s.`);
-    }
-    throw offlineError(baseUrl);
-  }
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    if (res.status === 404 || /not found/i.test(body)) {
-      throw new Error(`Model "${model}" is not installed in Ollama. Run: ollama pull ${model}`);
-    }
-    throw new Error(`Ollama error ${res.status}: ${body.slice(0, 300)}`);
-  }
-
-  const data = await res.json();
   return {
     text: stripThinking(data.message?.content),
     model: data.model || model,
@@ -143,25 +196,33 @@ export async function ollamaEmbed(texts, { model = getOllamaEmbedModel(), timeou
  * Uses the same num_ctx as ollamaChat(): a different context size would make
  * Ollama reload the model and throw the cache away.
  */
-export async function ollamaWarmup(systemPrompt, { model = getOllamaModel(), numCtx = 8192 } = {}) {
+export async function ollamaWarmup(systemPrompt, { model = getOllamaModel(), numCtx = 4096 } = {}) {
   try {
-    await fetch(`${getOllamaBaseUrl()}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(180000),
-      body: JSON.stringify({
+    await postChatPayload(
+      getOllamaBaseUrl(),
+      {
         model,
         messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: 'hi' }],
         stream: false,
-        think: false,
         keep_alive: '30m',
         options: { num_ctx: numCtx, num_predict: 1 }
-      })
-    });
+      },
+      180000
+    );
     return true;
   } catch {
     return false;
   }
+}
+
+function isModelInstalled(installedModels, targetModel) {
+  if (!targetModel) return false;
+  const wanted = targetModel.includes(':') ? targetModel : `${targetModel}:latest`;
+  return installedModels.some((name) => {
+    if (name === targetModel || name === wanted) return true;
+    const shortName = name.replace(/^registry\.ollama\.ai\/library\//i, '');
+    return shortName === targetModel || shortName === wanted;
+  });
 }
 
 /**
@@ -173,12 +234,11 @@ export async function ollamaStatus() {
   const model = getOllamaModel();
   try {
     const res = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
-    if (!res.ok) return { online: false, model, modelInstalled: false, models: [] };
+    if (!res.ok) return { online: false, baseUrl, model, modelInstalled: false, models: [] };
     const data = await res.json();
     const models = (data.models || []).map((m) => m.name);
-    const wanted = model.includes(':') ? model : `${model}:latest`;
-    return { online: true, model, modelInstalled: models.includes(wanted), models };
+    return { online: true, baseUrl, model, modelInstalled: isModelInstalled(models, model), models };
   } catch {
-    return { online: false, model, modelInstalled: false, models: [] };
+    return { online: false, baseUrl, model, modelInstalled: false, models: [] };
   }
 }

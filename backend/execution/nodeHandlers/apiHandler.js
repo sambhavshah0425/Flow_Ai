@@ -10,8 +10,9 @@ export async function apiHandler(node, context) {
   const url = resolveVariables(rawUrl, context);
   const resolvedBodyStr = resolveVariables(rawBody, context);
 
-  let dataPayload = null;
-  if (resolvedBodyStr && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+  const hasBodyMethod = method === 'POST' || method === 'PUT' || method === 'PATCH';
+  let dataPayload;
+  if (resolvedBodyStr && hasBodyMethod) {
     try {
       dataPayload = JSON.parse(resolvedBodyStr);
     } catch {
@@ -19,12 +20,13 @@ export async function apiHandler(node, context) {
     }
   }
 
+  const defaultHeaders = dataPayload !== undefined ? { 'Content-Type': 'application/json' } : {};
   const startTime = Date.now();
   const response = await axios({
     method,
     url,
-    data: dataPayload,
-    headers: nodeData.headers || { 'Content-Type': 'application/json' },
+    ...(dataPayload !== undefined ? { data: dataPayload } : {}),
+    headers: nodeData.headers || defaultHeaders,
     timeout: nodeData.timeoutMs || 10000
   });
 

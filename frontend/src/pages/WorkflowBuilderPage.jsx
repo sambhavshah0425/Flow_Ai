@@ -26,6 +26,7 @@ export function WorkflowBuilderPage() {
   const navigate = useNavigate();
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
   const {
+    currentWorkflowId,
     nodes,
     edges,
     workflowName,
@@ -72,7 +73,7 @@ export function WorkflowBuilderPage() {
       edges
     };
 
-    await runCurrentWorkflow(workflowData);
+    await runCurrentWorkflow(workflowData, currentWorkflowId);
   };
 
   const handleSaveWorkflow = async () => {

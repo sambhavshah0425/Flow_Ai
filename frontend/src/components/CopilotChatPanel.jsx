@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useCopilotStore } from '../store/useCopilotStore';
-import { Bot, X, Send, RotateCcw, Loader2, CheckCircle2, AlertTriangle, User } from 'lucide-react';
+import { Bot, X, Send, RotateCcw, Loader2, CheckCircle2, AlertTriangle, User, RefreshCw } from 'lucide-react';
 
 const SUGGESTIONS = [
   'Summarize a PDF and email me the summary',
@@ -19,14 +19,25 @@ function StatusBadge({ status }) {
   );
 }
 
-function SetupHint({ status }) {
+function SetupHint({ status, onRetry, isChecking }) {
   if (!status || (status.online && status.modelInstalled)) return null;
   const model = status.model || 'qwen3:1.7b';
   return (
     <div className="mx-3 mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-200 space-y-1.5">
-      <div className="font-semibold flex items-center gap-1.5">
-        <AlertTriangle className="w-3.5 h-3.5" />
-        {status.online ? `Model ${model} is not installed` : 'Ollama is not running'}
+      <div className="font-semibold flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          {status.online ? `Model ${model} is not installed` : 'Ollama is not running'}
+        </span>
+        <button
+          onClick={onRetry}
+          disabled={isChecking}
+          className="px-2 py-0.5 rounded-md bg-amber-500/20 hover:bg-amber-500/30 text-amber-100 text-[10px] font-semibold flex items-center gap-1 disabled:opacity-50"
+          title="Recheck Ollama status"
+        >
+          <RefreshCw className={`w-3 h-3 ${isChecking ? 'animate-spin' : ''}`} />
+          Retry
+        </button>
       </div>
       {!status.online && <p>Install Ollama from <span className="font-mono">ollama.com</span> and start it.</p>}
       <p>Then run in a terminal:</p>
@@ -66,13 +77,22 @@ function Message({ m }) {
 }
 
 export function CopilotChatPanel() {
-  const { isOpen, close, messages, isSending, status, sendMessage, resetChat } = useCopilotStore();
+  const { isOpen, close, messages, isSending, isCheckingStatus, status, sendMessage, resetChat, recheckConnection } = useCopilotStore();
   const [input, setInput] = useState('');
   const listRef = useRef(null);
 
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, isSending]);
+
+  // Automatically poll every 5s only while the panel is open and Qwen isn't ready yet.
+  useEffect(() => {
+    if (!isOpen || (status?.online && status?.modelInstalled)) return undefined;
+    const timer = setInterval(() => {
+      recheckConnection();
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [isOpen, status?.online, status?.modelInstalled, recheckConnection]);
 
   if (!isOpen) return null;
 
@@ -104,6 +124,14 @@ export function CopilotChatPanel() {
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            onClick={recheckConnection}
+            disabled={isCheckingStatus}
+            title="Refresh Qwen connection"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-dark-700 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isCheckingStatus ? 'animate-spin' : ''}`} />
+          </button>
           <button onClick={resetChat} title="New chat" className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-dark-700">
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
@@ -113,7 +141,7 @@ export function CopilotChatPanel() {
         </div>
       </div>
 
-      <SetupHint status={status} />
+      <SetupHint status={status} onRetry={recheckConnection} isChecking={isCheckingStatus} />
 
       {/* Messages */}
       <div ref={listRef} className="flex-1 overflow-y-auto p-3 space-y-3">

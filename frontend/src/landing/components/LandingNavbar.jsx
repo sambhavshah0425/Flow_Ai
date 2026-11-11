@@ -1,123 +1,191 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Cpu, Github, Menu, X } from 'lucide-react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { ArrowRight, FlowArrow } from '@phosphor-icons/react';
+import { BASE_EASE } from './MotionPrimitives';
 
-const NAV_LINKS = [
-  { label: 'Features', href: '#features' },
-  { label: 'How it Works', href: '#how-it-works' },
-  { label: 'Node Types', href: '#node-types' },
-  { label: 'GitHub', href: 'https://github.com', external: true }
+const NAV_ITEMS = [
+  { id: 'benefits', label: 'Benefits' },
+  { id: 'preview', label: 'Preview' },
+  { id: 'nodes', label: 'Nodes' },
+  { id: 'pricing', label: 'Pricing' },
+  { id: 'faq', label: 'FAQ' }
 ];
 
 export function LandingNavbar() {
-  const [scrolled, setScrolled] = useState(false);
+  const [activeId, setActiveId] = useState('benefits');
   const [menuOpen, setMenuOpen] = useState(false);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    const sections = NAV_ITEMS.map((item) => document.getElementById(item.id)).filter(Boolean);
+    if (sections.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+        if (visible.length > 0) {
+          setActiveId(visible[0].target.id);
+        }
+      },
+      { rootMargin: '-30% 0px -55% 0px', threshold: [0.1, 0.4] }
+    );
+
+    sections.forEach((sec) => observer.observe(sec));
+    return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [menuOpen]);
+
   return (
-    <header className={`fixed top-0 inset-x-0 z-50 transition-[padding] duration-300 ease-expo ${scrolled ? 'sm:pt-3' : ''}`}>
-      <nav
-        aria-label="Main"
-        className={`max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4 transition-all duration-300 ease-expo ${
-          scrolled
-            ? 'bg-lp-900/85 backdrop-blur-xl border-b border-white/[0.06] sm:border sm:rounded-2xl shadow-lg shadow-black/20'
-            : 'bg-transparent'
-        }`}
-      >
-        {/* Logo */}
-        <a href="#top" className="flex items-center gap-2.5 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-lp-500">
-          <span className="p-2 rounded-xl bg-gradient-to-br from-lp-500 to-lp-700 shadow-lg shadow-lp-500/30">
-            <Cpu className="w-5 h-5 text-white" aria-hidden="true" />
-          </span>
-          <span className="font-bold text-white text-lg tracking-tight whitespace-nowrap">
-            FlowForge <span className="text-[10px] align-top font-semibold text-lp-500 border border-lp-500/40 rounded px-1 py-0.5 ml-0.5">OS</span>
-          </span>
-        </a>
-
-        {/* Desktop links */}
-        <ul className="hidden md:flex items-center gap-1">
-          {NAV_LINKS.map((link) => (
-            <li key={link.label}>
-              <a
-                href={link.href}
-                {...(link.external ? { target: '_blank', rel: 'noreferrer' } : {})}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-white/[0.06] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-lp-500"
-              >
-                {link.external && <Github className="w-4 h-4" aria-hidden="true" />}
-                {link.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-
-        {/* Right actions */}
-        <div className="hidden md:flex items-center gap-2">
-          <Link
-            to="/login"
-            className="px-3.5 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-white/[0.06] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-lp-500"
-          >
-            Sign In
-          </Link>
-          <Link
-            to="/login"
-            className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-lp-500 to-lp-700 hover:from-lp-500 hover:to-lp-600 shadow-lg shadow-lp-500/25 transition-all hover:shadow-lp-500/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lp-500"
-          >
-            Get Started
-          </Link>
-        </div>
-
-        {/* Mobile menu toggle */}
-        <button
-          type="button"
-          onClick={() => setMenuOpen((v) => !v)}
-          aria-expanded={menuOpen}
-          aria-controls="mobile-nav"
-          aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
-          className="md:hidden p-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-lp-500"
+    <>
+      <header className="fixed top-4 inset-x-0 z-50 flex justify-center px-4 pointer-events-none">
+        <nav
+          aria-label="Primary navigation"
+          className="pointer-events-auto w-full md:w-fit bg-[#181818]/85 backdrop-blur-xl border border-[#272727] rounded-2xl p-2 flex items-center justify-between gap-4"
         >
-          {menuOpen ? <X className="w-5 h-5" aria-hidden="true" /> : <Menu className="w-5 h-5" aria-hidden="true" />}
-        </button>
-      </nav>
+          <a
+            href="#top"
+            className="flex items-center gap-2 px-2 py-1 rounded-lg text-white lp-interactive focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          >
+            <span className="w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center shrink-0">
+              <FlowArrow size={18} weight="bold" aria-hidden="true" />
+            </span>
+            <span className="title-4 text-white whitespace-nowrap">FlowForge OS</span>
+          </a>
 
-      {/* Mobile menu */}
-      {menuOpen && (
-        <div id="mobile-nav" className="md:hidden bg-lp-900/95 backdrop-blur-xl border-b border-white/[0.06] px-4 pb-4">
-          <ul className="flex flex-col gap-1 pt-2">
-            {NAV_LINKS.map((link) => (
-              <li key={link.label}>
-                <a
-                  href={link.href}
-                  {...(link.external ? { target: '_blank', rel: 'noreferrer' } : {})}
-                  onClick={() => setMenuOpen(false)}
-                  className="block px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-lp-500"
-                >
-                  {link.label}
-                </a>
-              </li>
-            ))}
-            <li className="pt-2 flex flex-col gap-2">
-              <Link
-                to="/login"
-                className="block text-center px-3 py-2.5 rounded-lg text-sm text-slate-200 border border-white/10 hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-lp-500"
-              >
-                Sign In
-              </Link>
-              <Link
-                to="/login"
-                className="block text-center px-3 py-2.5 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-lp-500 to-lp-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lp-500"
-              >
-                Get Started
-              </Link>
-            </li>
+          <ul className="hidden md:flex items-center gap-1">
+            {NAV_ITEMS.map((item) => {
+              const isActive = activeId === item.id;
+              return (
+                <li key={item.id}>
+                  <a
+                    href={`#${item.id}`}
+                    aria-current={isActive ? 'location' : undefined}
+                    className={`block px-3 py-2 rounded-lg title-4 lp-interactive focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
+                      isActive
+                        ? 'bg-[#272727] text-white'
+                        : 'text-[#9B9B9B] hover:text-white hover:bg-[#1F1F1F]'
+                    }`}
+                  >
+                    {item.label}
+                  </a>
+                </li>
+              );
+            })}
           </ul>
-        </div>
-      )}
-    </header>
+
+          <div className="flex items-center gap-2">
+            <Link
+              to="/login"
+              className="hidden md:inline-flex items-center gap-2 py-2 px-3 rounded-lg bg-white text-black hover:bg-[#E5E5E5] button-sm lp-interactive focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white whitespace-nowrap"
+            >
+              <span>Start studio</span>
+              <ArrowRight size={14} weight="bold" aria-hidden="true" />
+            </Link>
+
+            <button
+              type="button"
+              onClick={() => setMenuOpen((prev) => !prev)}
+              aria-expanded={menuOpen}
+              aria-controls="mobile-nav-drawer"
+              aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+              className="md:hidden w-10 h-10 rounded-lg bg-[#1F1F1F] border border-[#272727] flex items-center justify-center lp-interactive focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              <span className="relative w-4 h-3 flex flex-col justify-between" aria-hidden="true">
+                <span
+                  className={`block h-0.5 w-4 bg-white rounded-full transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] origin-center ${
+                    menuOpen ? 'translate-y-[5px] rotate-45' : ''
+                  }`}
+                />
+                <span
+                  className={`block h-0.5 w-4 bg-white rounded-full transition-opacity duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                    menuOpen ? 'opacity-0' : 'opacity-100'
+                  }`}
+                />
+                <span
+                  className={`block h-0.5 w-4 bg-white rounded-full transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] origin-center ${
+                    menuOpen ? '-translate-y-[5px] -rotate-45' : ''
+                  }`}
+                />
+              </span>
+            </button>
+          </div>
+        </nav>
+      </header>
+
+      <AnimatePresence>
+        {menuOpen && (
+          <motion.div
+            id="mobile-nav-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Mobile navigation"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3, ease: BASE_EASE }}
+            className="fixed inset-0 h-screen z-40 bg-[#000000]/95 backdrop-blur-2xl md:hidden flex flex-col justify-between pt-24 pb-8 px-6"
+          >
+            <ul className="flex flex-col gap-3">
+              {NAV_ITEMS.map((item, idx) => {
+                const isActive = activeId === item.id;
+                const delay = Math.min(idx * 0.06, 0.36);
+                return (
+                  <motion.li
+                    key={item.id}
+                    initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 24 }}
+                    animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.4, delay, ease: BASE_EASE }}
+                  >
+                    <a
+                      href={`#${item.id}`}
+                      onClick={() => setMenuOpen(false)}
+                      aria-current={isActive ? 'location' : undefined}
+                      className={`block p-4 rounded-2xl border title-2 lp-interactive ${
+                        isActive
+                          ? 'bg-[#181818] border-[#313131] text-white'
+                          : 'bg-[#181818] border-[#272727] text-[#9B9B9B] hover:text-white'
+                      }`}
+                    >
+                      {item.label}
+                    </a>
+                  </motion.li>
+                );
+              })}
+            </ul>
+
+            <motion.div
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 24 }}
+              animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.36, ease: BASE_EASE }}
+              className="space-y-3"
+            >
+              <Link
+                to="/login"
+                onClick={() => setMenuOpen(false)}
+                className="w-full inline-flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-white text-black button-md lp-interactive"
+              >
+                <span>Start local studio</span>
+                <ArrowRight size={16} weight="bold" aria-hidden="true" />
+              </Link>
+              <p className="caption-5 text-[#9B9B9B] text-center">
+                MIT open source. Local Qwen engine via Ollama.
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

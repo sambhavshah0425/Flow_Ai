@@ -36,7 +36,7 @@ export const useExecutionStore = create((set, get) => ({
     });
   },
 
-  runCurrentWorkflow: async (workflowData) => {
+  runCurrentWorkflow: async (workflowData, workflowId = null) => {
     get().resetExecution();
     set({ isExecuting: true });
 
@@ -53,7 +53,8 @@ export const useExecutionStore = create((set, get) => ({
 
     try {
       // Phase 1: create the execution record and get its id (nothing runs yet).
-      const res = await api.post('/executions/run', { workflowData });
+      const payload = workflowId ? { workflowId, workflowData } : { workflowData };
+      const res = await api.post('/executions/run', payload);
       const { executionId } = res.data;
 
       set({ activeExecutionId: executionId });
@@ -83,6 +84,19 @@ export const useExecutionStore = create((set, get) => ({
     socket.off('workflow.completed');
     socket.off('workflow.failed');
     socket.off('connect_error');
+    socket.off('error');
+
+    socket.on('error', (err) => {
+      const message = err?.message || (typeof err === 'string' ? err : 'Socket execution error');
+      console.error('[Socket.IO] Server error:', message);
+      get().addLog({
+        nodeId: 'engine',
+        level: 'error',
+        message,
+        timestamp: new Date().toISOString()
+      });
+      set({ isExecuting: false });
+    });
 
     socket.on('connect_error', (err) => {
       console.error('[Socket.IO] Connection error:', err.message);

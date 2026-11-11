@@ -78,15 +78,22 @@ export const useAuthStore = create((set) => ({
     }
   },
 
-  logout: () => {
-    localStorage.removeItem('flowforge_token');
-
-    set({
-      user: null,
-      token: null,
-      isAuthenticated: false,
-      error: null,
-    });
+  logout: async () => {
+    try {
+      if (localStorage.getItem('flowforge_token')) {
+        await api.post('/auth/logout');
+      }
+    } catch {
+      // Clear local session even if server is offline or token already expired
+    } finally {
+      localStorage.removeItem('flowforge_token');
+      set({
+        user: null,
+        token: null,
+        isAuthenticated: false,
+        error: null,
+      });
+    }
   },
 
   checkAuth: async () => {

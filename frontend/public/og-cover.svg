@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <rect width="1200" height="630" fill="#000000" />
+  <rect x="48" y="48" width="1104" height="534" rx="24" fill="#181818" stroke="#272727" stroke-width="2" />
+  <rect x="96" y="108" width="44" height="44" rx="12" fill="#FFFFFF" />
+  <rect x="108" y="120" width="20" height="20" rx="4" fill="#000000" />
+  <text x="158" y="138" fill="#FFFFFF" font-family="Geist, system-ui, sans-serif" font-size="28" font-weight="600">FlowForge OS</text>
+  <text x="96" y="256" fill="#FFFFFF" font-family="Geist, system-ui, sans-serif" font-size="60" font-weight="600">Ship local AI workflows</text>
+  <text x="96" y="328" fill="#9B9B9B" font-family="Geist, system-ui, sans-serif" font-size="60" font-weight="600">without cloud API bills</text>
+  <text x="96" y="400" fill="#9B9B9B" font-family="Geist, system-ui, sans-serif" font-size="24" font-weight="400">Visual DAG orchestration with local Qwen via Ollama, vector RAG, and encrypted secrets.</text>
+  <rect x="96" y="456" width="220" height="56" rx="12" fill="#1F1F1F" stroke="#313131" stroke-width="1.5" />
+  <text x="120" y="491" fill="#FFFFFF" font-family="Geist Mono, monospace" font-size="18">10 Node Handlers</text>
+  <rect x="336" y="456" width="220" height="56" rx="12" fill="#1F1F1F" stroke="#313131" stroke-width="1.5" />
+  <text x="364" y="491" fill="#FFFFFF" font-family="Geist Mono, monospace" font-size="18">Qwen via Ollama</text>
+  <rect x="576" y="456" width="240" height="56" rx="12" fill="#1F1F1F" stroke="#313131" stroke-width="1.5" />
+  <text x="606" y="491" fill="#FFFFFF" font-family="Geist Mono, monospace" font-size="18">AES 256 GCM Vault</text>
+</svg>
+

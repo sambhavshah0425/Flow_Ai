@@ -4,7 +4,7 @@ import { User } from '../models/User.js';
 import { JWT_SECRET } from '../config/security.js';
 import { RevokedToken } from '../models/RevokedToken.js';
 import { isDBConnected } from '../config/db.js';
-import { memoryRevokedTokens } from '../controllers/authController.js';
+import { memoryRevokedTokens, memoryUsers } from '../controllers/authController.js';
 
 export async function authenticateJWT(req, res, next) {
   try {
@@ -31,17 +31,26 @@ export async function authenticateJWT(req, res, next) {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET);
-    
-    // Check if user exists (if database connected)
-    try {
-      const user = await User.findById(decoded.userId).select('-password');
-      if (user) {
-        req.user = user;
-      } else {
-        req.user = { _id: decoded.userId, email: decoded.email };
+
+    if (isDBConnected()) {
+      let user = null;
+      try {
+        user = await User.findById(decoded.userId).select('-password');
+      } catch {
+        return res.status(401).json({ success: false, message: 'Invalid session user. Please sign in again.' });
       }
-    } catch {
-      req.user = { _id: decoded.userId, email: decoded.email };
+
+      if (!user) {
+        return res.status(401).json({ success: false, message: 'Account not found. Please sign in again.' });
+      }
+      req.user = user;
+    } else {
+      const memUser = memoryUsers.get(String(decoded.email || '').toLowerCase());
+      if (memUser) {
+        req.user = { _id: memUser.id, id: memUser.id, name: memUser.name, email: memUser.email };
+      } else {
+        req.user = { _id: decoded.userId, id: decoded.userId, email: decoded.email };
+      }
     }
 
     next();

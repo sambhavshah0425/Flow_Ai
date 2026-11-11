@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import { isDBConnected } from './config/db.js';
 
 export const app = express();
 
@@ -50,6 +51,7 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
     service: 'FlowForge OS Orchestrator API',
+    database: isDBConnected() ? 'connected' : 'in-memory',
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
   });

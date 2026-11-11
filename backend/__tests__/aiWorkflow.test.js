@@ -113,5 +113,23 @@ describe('AI Workflow Controller Unit Tests', () => {
     it('throws error when workflow has no nodes', () => {
       expect(() => normalizeAndValidateWorkflow({ nodes: [] })).toThrow(/no nodes/i);
     });
+
+    it('sanitizes hyphenated edge ids and normalizes condition branch handles case-insensitively', () => {
+      const normalized = normalizeAndValidateWorkflow({
+        nodes: [
+          { id: 'cond-1', type: 'condition', data: { leftValue: 'a', operator: 'equals', rightValue: 'a' } },
+          { id: 'ai-true', type: 'ollama', data: { prompt: 'ok' } },
+          { id: 'ai-false', type: 'ollama', data: { prompt: 'nope' } }
+        ],
+        edges: [
+          { source: 'cond-1', target: 'ai-true', sourceHandle: 'True' },
+          { source: 'cond-1', target: 'ai-false', sourceHandle: 'FALSE' }
+        ]
+      });
+
+      expect(normalized.edges).toHaveLength(2);
+      expect(normalized.edges[0]).toMatchObject({ source: 'cond_1', target: 'ai_true', sourceHandle: 'true' });
+      expect(normalized.edges[1]).toMatchObject({ source: 'cond_1', target: 'ai_false', sourceHandle: 'false' });
+    });
   });
 });
