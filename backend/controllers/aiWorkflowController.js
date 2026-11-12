@@ -1,5 +1,6 @@
 import { parseDAG } from '../execution/dagParser.js';
 import { ollamaChat, parseJsonResponse } from '../utils/ollamaClient.js';
+import { autoLayout, stripRedundantTextSinks } from '../utils/workflowPostProcess.js';
 
 // SSRF Protection: Private / loopback hostnames and IP patterns
 const BLOCKED_HOST_PATTERNS = [
@@ -111,22 +112,27 @@ Output must be STRICT JSON matching this schema:
     {
       "id": "node_id",
       "type": "text"|"ollama"|"api"|"condition"|"pdf"|"embed"|"retrieve"|"email"|"delay"|"download",
-      "position": { "x": number, "y": number },
       "data": { "label": string, ... }
     }
   ],
   "edges": [
     {
-      "id": "e_<source>_<target>",
       "source": "source_node_id",
       "target": "target_node_id",
-      "sourceHandle": "true" | "false" | null,
-      "targetHandle": null,
-      "animated": true,
-      "type": "smoothstep"
+      "sourceHandle": "true" | "false" | null
     }
   ]
 }
+
+Examples:
+1) Goal: "Fetch a post from https://jsonplaceholder.typicode.com/posts/1 and summarize it"
+{"name":"API Summary","description":"Fetches a post and summarizes it.","nodes":[{"id":"api_1","type":"api","data":{"label":"Fetch Post","url":"https://jsonplaceholder.typicode.com/posts/1","method":"GET"}},{"id":"ollama_1","type":"ollama","data":{"label":"Summarize","prompt":"Summarize cleanly:\\n{{api_1.data}}","responseFormat":"concise"}}],"edges":[{"source":"api_1","target":"ollama_1"}]}
+
+2) Goal: "Ask questions about an uploaded PDF document"
+{"name":"PDF RAG Q&A","description":"Indexes PDF chunks and answers grounded questions.","nodes":[{"id":"pdf_1","type":"pdf","data":{"label":"Upload PDF","fileName":"document.pdf"}},{"id":"text_1","type":"text","data":{"label":"Question","text":"What are the key takeaways?"}},{"id":"embed_1","type":"embed","data":{"label":"Index PDF","text":"{{pdf_1.text}}","chunkSize":900,"overlap":150}},{"id":"retrieve_1","type":"retrieve","data":{"label":"Find Context","query":"{{text_1.text}}","topK":4}},{"id":"ollama_1","type":"ollama","data":{"label":"Grounded Answer","prompt":"Context:\\n{{retrieve_1.context}}\\n\\nQuestion: {{text_1.text}}","responseFormat":"rag_grounded"}}],"edges":[{"source":"pdf_1","target":"embed_1"},{"source":"embed_1","target":"retrieve_1"},{"source":"text_1","target":"retrieve_1"},{"source":"retrieve_1","target":"ollama_1"}]}
+
+3) Goal: "Check https://api.site/health and email ops@x.com if status is not 200"
+{"name":"Health Alert","description":"Checks endpoint status and branches on HTTP 200.","nodes":[{"id":"api_1","type":"api","data":{"label":"Health Check","url":"https://api.site/health","method":"GET"}},{"id":"condition_1","type":"condition","data":{"label":"Is 200?","leftValue":"{{api_1.status}}","operator":"equals","rightValue":"200"}},{"id":"text_1","type":"text","data":{"label":"Healthy","text":"Service returned 200 OK."}},{"id":"email_1","type":"email","data":{"label":"Send Alert","to":"ops@x.com","subject":"Service Alert","body":"Status returned {{api_1.status}}"}}],"edges":[{"source":"api_1","target":"condition_1"},{"source":"condition_1","target":"text_1","sourceHandle":"true"},{"source":"condition_1","target":"email_1","sourceHandle":"false"}]}
 `;
 
 /**
@@ -543,14 +549,19 @@ export async function generateWorkflowFromPrompt(req, res) {
           { role: 'user', content: `<user_goal>\n${cleanPrompt}\n</user_goal>` }
         ],
         format: WORKFLOW_SCHEMA,
-        temperature: 0.2,
+        temperature: 0.15,
+        numPredict: 1200,
         timeoutMs: GENERATION_TIMEOUT_MS
       });
       const parsedJson = parseJsonResponse(result.text);
       if (!parsedJson) {
         throw new Error('Model returned unparseable JSON.');
       }
-      generatedWorkflow = normalizeAndValidateWorkflow(parsedJson);
+      const cleaned = stripRedundantTextSinks(normalizeAndValidateWorkflow(parsedJson));
+      generatedWorkflow = {
+        ...cleaned,
+        nodes: autoLayout(cleaned.nodes, cleaned.edges)
+      };
     } catch (aiErr) {
       // Ollama offline, model not pulled, timeout, or an unusable workflow.
       console.warn(`[AI Workflow Gen] Local Qwen attempt failed (${aiErr.message}) -> Served via deterministic fallback.`);

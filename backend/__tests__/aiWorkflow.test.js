@@ -1,9 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   sanitizeAndValidateUrl,
   generateFallbackWorkflow,
-  normalizeAndValidateWorkflow
+  normalizeAndValidateWorkflow,
+  generateWorkflowFromPrompt
 } from '../controllers/aiWorkflowController.js';
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe('AI Workflow Controller Unit Tests', () => {
   describe('SSRF Protection & URL Sanitization', () => {
@@ -130,6 +133,42 @@ describe('AI Workflow Controller Unit Tests', () => {
       expect(normalized.edges).toHaveLength(2);
       expect(normalized.edges[0]).toMatchObject({ source: 'cond_1', target: 'ai_true', sourceHandle: 'true' });
       expect(normalized.edges[1]).toMatchObject({ source: 'cond_1', target: 'ai_false', sourceHandle: 'false' });
+    });
+  });
+
+  describe('Live AI Workflow Post-Processing', () => {
+    it('strips redundant text sinks and applies left-to-right DAG autoLayout', async () => {
+      const generated = {
+        name: 'Summary Flow',
+        nodes: [
+          { id: 'api_1', type: 'api', data: { label: 'Fetch', url: 'https://jsonplaceholder.typicode.com/posts/1' } },
+          { id: 'ollama_1', type: 'ollama', data: { label: 'Summarize', prompt: '{{api_1.data}}' } },
+          { id: 'text_sink', type: 'text', data: { label: 'Display', text: '{{ollama_1.text}}' } }
+        ],
+        edges: [
+          { source: 'api_1', target: 'ollama_1' },
+          { source: 'ollama_1', target: 'text_sink' }
+        ]
+      };
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ model: 'qwen3:1.7b', message: { content: JSON.stringify(generated) } })
+        })
+      );
+
+      const res = {
+        statusCode: 200,
+        status(code) { this.statusCode = code; return this; },
+        json(payload) { this.body = payload; return this; }
+      };
+
+      await generateWorkflowFromPrompt({ body: { prompt: 'Fetch a post and summarize it' } }, res);
+      expect(res.statusCode).toBe(200);
+      expect(res.body.mode).toBe('live_ai');
+      expect(res.body.workflow.nodes.map((n) => n.id)).toEqual(['api_1', 'ollama_1']);
+      expect(res.body.workflow.nodes[1].position.x).toBeGreaterThan(res.body.workflow.nodes[0].position.x);
     });
   });
 });

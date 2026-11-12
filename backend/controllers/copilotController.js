@@ -1,6 +1,15 @@
-import { ollamaChat, ollamaStatus, ollamaWarmup, parseJsonResponse } from '../utils/ollamaClient.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { ollamaChat, ollamaStatus, ollamaWarmup, getOllamaCopilotModel, parseJsonResponse } from '../utils/ollamaClient.js';
 import { normalizeAndValidateWorkflow } from './aiWorkflowController.js';
-import { parseDAG } from '../execution/dagParser.js';
+import { autoLayout, stripRedundantTextSinks } from '../utils/workflowPostProcess.js';
+import { toPlainEnglish } from '../utils/plainText.js';
+
+export { autoLayout, stripRedundantTextSinks };
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const CUSTOM_COPILOT_DATASET_PATH = path.resolve(__dirname, '../../training/custom_copilot_examples.jsonl');
 
 /**
  * Conversational workflow copilot, powered by a local Qwen model via Ollama.
@@ -25,6 +34,7 @@ Answer with JSON: {"action": "ask" | "build", "reply": "...", "workflow": {...}}
 - "ask": for greetings, general questions, workflow explanations, or when you need clarification. Reply naturally in "reply" and omit "workflow".
 
 Rules:
+- Always write "reply" in simple plain English with NO Markdown symbols (never use **, *, #, or backticks).
 - Build only when the user asks to create, run, or change an automation (or says "build it" / "go"). For greetings or general questions, answer with action "ask" and omit "workflow".
 - Add only the exact steps the user asked for. An ollama node's output already displays to the user, so end at ollama unless another destination step was explicitly requested.
 - Input nodes ("text" and "pdf") only start a workflow.
@@ -128,24 +138,6 @@ const MAX_MESSAGE_CHARS = 4000;
 const KEEP_HISTORY = 12;
 
 /**
- * Lay nodes out left-to-right by dependency depth, centring each column
- * vertically, so branches (true/false) don't pile on top of each other.
- */
-export function autoLayout(nodes, edges) {
-  const { levels } = parseDAG(nodes, edges);
-  const positions = {};
-  levels.forEach((levelNodes, col) => {
-    levelNodes.forEach((node, row) => {
-      positions[node.id] = {
-        x: 100 + col * 340,
-        y: 200 + (row - (levelNodes.length - 1) / 2) * 170
-      };
-    });
-  });
-  return nodes.map((n) => ({ ...n, position: positions[n.id] || n.position }));
-}
-
-/**
  * Compact view of the current canvas for the model: ids, types and data only,
  * with long strings (e.g. extracted PDF text) and SMTP plumbing trimmed out.
  */
@@ -170,84 +162,6 @@ export function summarizeCanvas(workflow) {
 
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 export const EMAIL_QUESTION = 'Which email address should I send it to?';
-
-const DEFAULT_OUTPUT_FIELD = {
-  api: 'data',
-  retrieve: 'context'
-};
-
-/**
- * Small local models sometimes append an unrequested `text` node downstream
- * of `ollama`/`email` ("to store the summary") or route `ollama -> text -> download`.
- * Because `text` nodes perform no computation, drop leaf sinks and bypass
- * pass-through `text` aliases while keeping genuine root `text` inputs untouched.
- */
-export function stripRedundantTextSinks(workflow) {
-  let nodes = workflow.nodes.map((n) => ({ ...n, data: { ...(n.data || {}) } }));
-  let edges = workflow.edges.map((e) => ({ ...e }));
-
-  for (let step = 0; step < workflow.nodes.length && nodes.length > 1; step++) {
-    const nodeById = new Map(nodes.map((n) => [n.id, n]));
-    const target = nodes.find((n) => {
-      if (n.type !== 'text') return false;
-      const inEdges = edges.filter((e) => e.target === n.id);
-      if (inEdges.length === 0) return false;
-      const outEdges = edges.filter((e) => e.source === n.id);
-      if (outEdges.length > 0 && inEdges.length !== 1) return false;
-      const rawText = String(n.data.text ?? n.data.content ?? '').trim();
-      const fromCondition = inEdges.some((e) => nodeById.get(e.source)?.type === 'condition');
-      return !fromCondition || rawText === '' || rawText.includes('{{');
-    });
-
-    if (!target) break;
-
-    const inEdges = edges.filter((e) => e.target === target.id);
-    const outEdges = edges.filter((e) => e.source === target.id);
-
-    if (outEdges.length > 0) {
-      const srcEdge = inEdges[0];
-      const srcNode = nodeById.get(srcEdge.source);
-      const rawText = String(target.data.text ?? target.data.content ?? '').trim();
-      const defaultField = DEFAULT_OUTPUT_FIELD[srcNode?.type] || 'text';
-      const replacement = rawText.includes('{{') ? rawText : `{{${srcNode.id}.${defaultField}}}`;
-      const refRe = new RegExp(`\\{\\{\\s*${target.id}\\.(?:text|output|content)\\s*\\}\\}`, 'g');
-
-      for (const n of nodes) {
-        if (n.id === target.id) continue;
-        for (const [k, v] of Object.entries(n.data)) {
-          if (typeof v === 'string' && v.includes(target.id)) {
-            n.data[k] = v.replace(refRe, replacement);
-          }
-        }
-      }
-
-      const rewired = outEdges.map((outEdge) => ({
-        ...outEdge,
-        id: `e_${srcEdge.source}_to_${outEdge.target}`,
-        source: srcEdge.source,
-        target: outEdge.target,
-        sourceHandle: srcEdge.sourceHandle,
-        ...(srcEdge.style ? { style: srcEdge.style } : {})
-      }));
-      const seen = new Set();
-      edges = [
-        ...edges.filter((e) => e.source !== target.id && e.target !== target.id),
-        ...rewired
-      ].filter((e) => {
-        const key = `${e.source}|${e.target}|${e.sourceHandle || ''}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-    } else {
-      edges = edges.filter((e) => e.target !== target.id);
-    }
-
-    nodes = nodes.filter((n) => n.id !== target.id);
-  }
-
-  return { ...workflow, nodes, edges };
-}
 
 /**
  * Small models happily invent recipients like "user@example.com". This check
@@ -285,9 +199,9 @@ export function checkEmailRecipients(workflow, messages, currentWorkflow) {
   return 'ok';
 }
 
-/** GET /api/copilot/status — is Ollama running and is the model pulled? */
+/** GET /api/copilot/status — is Ollama running and is the copilot model pulled? */
 export async function getCopilotStatus(req, res) {
-  const status = await ollamaStatus();
+  const status = await ollamaStatus(getOllamaCopilotModel());
   return res.status(200).json({ success: true, ...status });
 }
 
@@ -300,7 +214,7 @@ let warmupInFlight = null;
  */
 export async function copilotWarmup(req, res) {
   if (!warmupInFlight) {
-    warmupInFlight = ollamaWarmup(SYSTEM_PROMPT).finally(() => { warmupInFlight = null; });
+    warmupInFlight = ollamaWarmup(SYSTEM_PROMPT, { model: getOllamaCopilotModel() }).finally(() => { warmupInFlight = null; });
   }
   return res.status(202).json({ success: true, warming: true });
 }
@@ -340,14 +254,20 @@ export async function copilotChat(req, res) {
 
   let result;
   try {
-    result = await ollamaChat({ messages: modelMessages, format: RESPONSE_SCHEMA, temperature: 0.2 });
+    result = await ollamaChat({
+      model: getOllamaCopilotModel(),
+      messages: modelMessages,
+      format: RESPONSE_SCHEMA,
+      temperature: 0.15,
+      numPredict: 1000
+    });
   } catch (err) {
     // Ollama offline / model missing / timeout — the message says how to fix it.
     return res.status(503).json({ success: false, message: err.message });
   }
 
   const parsed = parseJsonResponse(result.text);
-  const replyText = typeof parsed?.reply === 'string' ? parsed.reply.trim() : '';
+  const replyText = typeof parsed?.reply === 'string' ? toPlainEnglish(parsed.reply) : '';
   if (!parsed || !replyText) {
     return res.status(200).json({
       success: true,
@@ -388,4 +308,67 @@ export async function copilotChat(req, res) {
       model: result.model
     });
   }
+}
+
+/**
+ * POST /api/copilot/save-example
+ * Save a user-approved chat turn (and optionally the resulting/edited canvas workflow)
+ * as a ChatML JSONL row in training/custom_copilot_examples.jsonl for LoRA fine-tuning.
+ */
+export async function saveCopilotExample(req, res) {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ success: false, message: 'Dataset recording is disabled in production.' });
+  }
+
+  const { messages, reply, action = 'ask', workflow, priorWorkflow } = req.body || {};
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ success: false, message: 'messages must be a non-empty array.' });
+  }
+  if (!['ask', 'build'].includes(action)) {
+    return res.status(400).json({ success: false, message: 'action must be "ask" or "build".' });
+  }
+  const cleanReply = typeof reply === 'string' ? toPlainEnglish(reply) : '';
+  if (!cleanReply) {
+    return res.status(400).json({ success: false, message: 'reply must be a non-empty string.' });
+  }
+
+  const validTurns = messages
+    .slice(-KEEP_HISTORY)
+    .filter((m) => m && ['user', 'assistant'].includes(m.role) && typeof m.content === 'string' && m.content.trim())
+    .map((m) => ({ role: m.role, content: m.content.trim().slice(0, MAX_MESSAGE_CHARS) }));
+
+  if (validTurns.length === 0 || validTurns[validTurns.length - 1].role !== 'user') {
+    return res.status(400).json({ success: false, message: 'The conversation prefix must end with a user message.' });
+  }
+
+  let assistantPayload = { action: 'ask', reply: cleanReply };
+  if (action === 'build' && workflow) {
+    try {
+      const validated = stripRedundantTextSinks(normalizeAndValidateWorkflow(workflow));
+      const sanitized = summarizeCanvas(validated);
+      assistantPayload = { action: 'build', reply: cleanReply, workflow: sanitized };
+    } catch (err) {
+      return res.status(400).json({ success: false, message: `Invalid workflow for training example: ${err.message}` });
+    }
+  }
+
+  const priorCanvas = summarizeCanvas(priorWorkflow);
+  const example = {
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...(priorCanvas ? [{ role: 'system', content: `Current workflow on the canvas:\n${JSON.stringify(priorCanvas)}` }] : []),
+      ...validTurns,
+      { role: 'assistant', content: JSON.stringify(assistantPayload) }
+    ]
+  };
+
+  fs.mkdirSync(path.dirname(CUSTOM_COPILOT_DATASET_PATH), { recursive: true });
+  fs.appendFileSync(CUSTOM_COPILOT_DATASET_PATH, JSON.stringify(example) + '\n', 'utf8');
+  const savedCount = fs.readFileSync(CUSTOM_COPILOT_DATASET_PATH, 'utf8').split(/\r?\n/).filter(Boolean).length;
+
+  return res.status(201).json({
+    success: true,
+    savedCount,
+    file: 'training/custom_copilot_examples.jsonl'
+  });
 }

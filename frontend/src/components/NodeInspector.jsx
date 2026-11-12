@@ -183,13 +183,29 @@ export function NodeInspector() {
                 onChange={(e) => handleChange('model', e.target.value)}
                 className="w-full bg-dark-900 border border-dark-600 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
               >
-                <option value="qwen3:1.7b">qwen3:1.7b (Fast, recommended)</option>
-                <option value="qwen3:4b">qwen3:4b (Better, slower)</option>
-                <option value="qwen3:8b">qwen3:8b (Best, needs 16GB RAM)</option>
+                <option value="qwen3:1.7b">qwen3:1.7b (Fast, 8GB RAM friendly)</option>
+                <option value="flowforge-qwen">flowforge-qwen (Custom Trained / Modelfile)</option>
+                <option value="qwen3:4b">qwen3:4b (Higher accuracy, slower)</option>
+                <option value="qwen3:8b">qwen3:8b (Heavy, needs 16GB RAM)</option>
               </select>
               <p className="text-[10px] text-slate-500 mt-1">
-                Pull it once with <span className="font-mono text-teal-400">ollama pull {data.model && !/^gemini/i.test(data.model) ? data.model : 'qwen3:1.7b'}</span>
+                {data.model === 'flowforge-qwen'
+                  ? <>Create with <span className="font-mono text-teal-400">ollama create flowforge-qwen -f training/Modelfile</span></>
+                  : <>Pull it once with <span className="font-mono text-teal-400">ollama pull {data.model && !/^gemini/i.test(data.model) ? data.model : 'qwen3:1.7b'}</span></>}
               </p>
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-300 mb-1">Answer Format</label>
+              <select
+                value={data.responseFormat || 'text'}
+                onChange={(e) => handleChange('responseFormat', e.target.value)}
+                className="w-full bg-dark-900 border border-dark-600 rounded-lg px-2.5 py-1.5 text-xs text-white"
+              >
+                <option value="concise">Concise &amp; Precise (Recommended)</option>
+                <option value="rag_grounded">Strict RAG Grounded (No Guessing)</option>
+                <option value="json">Strict JSON Output</option>
+                <option value="text">Standard Freeform Text</option>
+              </select>
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center justify-between">
@@ -205,16 +221,44 @@ export function NodeInspector() {
               />
             </div>
             <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1">Temperature ({data.temperature ?? 0.7})</label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={data.temperature !== undefined ? data.temperature : 0.7}
-                onChange={(e) => handleChange('temperature', parseFloat(e.target.value))}
-                className="w-full accent-teal-500 cursor-pointer"
+              <label className="block text-[11px] font-semibold text-slate-300 mb-1">System Instructions (optional)</label>
+              <textarea
+                rows={2}
+                value={data.system || ''}
+                onChange={(e) => handleChange('system', e.target.value)}
+                className="w-full bg-dark-900 border border-dark-600 rounded-lg p-2 text-xs text-white font-mono focus:outline-none focus:border-teal-500"
+                placeholder="Role, rules, or output fields..."
               />
+            </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                  Temperature ({data.temperature !== undefined ? data.temperature : 0.2})
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={data.temperature !== undefined ? data.temperature : 0.2}
+                  onChange={(e) => handleChange('temperature', parseFloat(e.target.value))}
+                  className="w-full accent-teal-500 cursor-pointer"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">Max Tokens</label>
+                <select
+                  value={data.maxTokens !== undefined ? String(data.maxTokens) : '768'}
+                  onChange={(e) => handleChange('maxTokens', parseInt(e.target.value, 10))}
+                  className="w-full bg-dark-900 border border-dark-600 rounded-lg px-2 py-1 text-xs text-white font-mono"
+                >
+                  <option value="256">256 (Fast)</option>
+                  <option value="512">512 (Crisp)</option>
+                  <option value="768">768 (Balanced)</option>
+                  <option value="1536">1536 (Detailed)</option>
+                  <option value="0">Unlimited</option>
+                </select>
+              </div>
             </div>
           </div>
         )}

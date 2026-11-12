@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useCopilotStore } from '../store/useCopilotStore';
-import { Bot, X, Send, RotateCcw, Loader2, CheckCircle2, AlertTriangle, User, RefreshCw } from 'lucide-react';
+import { Bot, X, Send, RotateCcw, Loader2, CheckCircle2, AlertTriangle, User, RefreshCw, BookmarkPlus, Check } from 'lucide-react';
 
 const SUGGESTIONS = [
   'Summarize a PDF and email me the summary',
@@ -46,8 +46,9 @@ function SetupHint({ status, onRetry, isChecking }) {
   );
 }
 
-function Message({ m }) {
+function Message({ m, isSaving, isSaved, onSaveExample }) {
   const isUser = m.role === 'user';
+  const canSave = !isUser && !m.local && !m.error;
   return (
     <div className={`flex gap-2 ${isUser ? 'flex-row-reverse' : ''}`}>
       <div className={`w-6 h-6 rounded-lg shrink-0 flex items-center justify-center ${isUser ? 'bg-brand-600' : m.error ? 'bg-red-500/20' : 'bg-teal-500/20'}`}>
@@ -71,13 +72,42 @@ function Message({ m }) {
             Added "{m.built.name}" ({m.built.nodeCount} nodes) to the canvas
           </div>
         )}
+        {canSave && (
+          <button
+            onClick={() => onSaveExample(m.id)}
+            disabled={isSaving || isSaved}
+            title="Save this conversation & workflow to training/custom_copilot_examples.jsonl"
+            className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md border transition-colors ${
+              isSaved
+                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                : 'border-dark-600 bg-dark-800/70 text-slate-400 hover:text-teal-300 hover:border-teal-500/40'
+            }`}
+          >
+            {isSaved ? <Check className="w-2.5 h-2.5" /> : <BookmarkPlus className="w-2.5 h-2.5" />}
+            {isSaved ? 'Saved for training' : isSaving ? 'Saving…' : 'Save to train'}
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
 export function CopilotChatPanel() {
-  const { isOpen, close, messages, isSending, isCheckingStatus, status, sendMessage, resetChat, recheckConnection } = useCopilotStore();
+  const {
+    isOpen,
+    close,
+    messages,
+    isSending,
+    isCheckingStatus,
+    status,
+    savingMsgId,
+    savedMsgIds,
+    totalSavedExamples,
+    sendMessage,
+    resetChat,
+    recheckConnection,
+    saveExampleForMessage
+  } = useCopilotStore();
   const [input, setInput] = useState('');
   const listRef = useRef(null);
 
@@ -145,7 +175,20 @@ export function CopilotChatPanel() {
 
       {/* Messages */}
       <div ref={listRef} className="flex-1 overflow-y-auto p-3 space-y-3">
-        {messages.map((m) => <Message key={m.id} m={m} />)}
+        {messages.map((m) => (
+          <Message
+            key={m.id}
+            m={m}
+            isSaving={savingMsgId === m.id}
+            isSaved={Boolean(savedMsgIds[m.id])}
+            onSaveExample={saveExampleForMessage}
+          />
+        ))}
+        {totalSavedExamples !== null && (
+          <div className="text-[10px] text-center text-teal-400/80 font-mono">
+            {totalSavedExamples} custom Copilot example{totalSavedExamples === 1 ? '' : 's'} queued for training
+          </div>
+        )}
 
         {messages.length === 1 && !isSending && (
           <div className="pt-1 space-y-1.5">

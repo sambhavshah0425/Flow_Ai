@@ -13,7 +13,14 @@ export const DEFAULT_NODES = [
     id: 'ollama_1',
     type: 'ollama',
     position: { x: 450, y: 150 },
-    data: { label: 'Local AI (Qwen)', prompt: '{{text_1.text}}', model: 'qwen3:1.7b', temperature: 0.7 }
+    data: {
+      label: 'Local AI (Qwen)',
+      prompt: '{{text_1.text}}',
+      model: 'qwen3:1.7b',
+      temperature: 0.2,
+      responseFormat: 'concise',
+      maxTokens: 768
+    }
   },
   {
     id: 'download_1',
@@ -108,7 +115,13 @@ export const useWorkflowStore = create((set, get) => ({
       data: {
         label: `${nodeType.toUpperCase()} Node`,
         ...(nodeType === 'text' && { text: 'Sample text' }),
-        ...(nodeType === 'ollama' && { prompt: 'Summarize: {{text_1.text}}', model: 'qwen3:1.7b', temperature: 0.7 }),
+        ...(nodeType === 'ollama' && {
+          prompt: 'Summarize: {{text_1.text}}',
+          model: 'qwen3:1.7b',
+          temperature: 0.2,
+          responseFormat: 'concise',
+          maxTokens: 768
+        }),
         ...(nodeType === 'api' && { url: 'https://jsonplaceholder.typicode.com/posts/1', method: 'GET' }),
         ...(nodeType === 'condition' && { leftValue: '{{text_1.text}}', operator: 'contains', rightValue: 'yes' }),
         ...(nodeType === 'embed' && { text: '{{pdf.text}}', chunkSize: 900 }),

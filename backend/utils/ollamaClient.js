@@ -17,6 +17,10 @@ export function getOllamaModel() {
   return process.env.OLLAMA_MODEL || DEFAULT_MODEL;
 }
 
+export function getOllamaCopilotModel() {
+  return process.env.OLLAMA_COPILOT_MODEL || getOllamaModel();
+}
+
 // Qwen3 can emit a <think>...</think> reasoning block (or an unclosed <think> if truncated).
 function stripThinking(text) {
   return String(text || '')
@@ -64,12 +68,15 @@ function offlineError(baseUrl) {
  * Send a chat request to Ollama and return the reply text plus token counts.
  *
  * @param {object}   opts
- * @param {Array}    opts.messages     [{ role: 'system'|'user'|'assistant', content }]
- * @param {string}  [opts.model]       defaults to OLLAMA_MODEL / qwen3:1.7b
- * @param {object}  [opts.format]      JSON schema to force structured output
+ * @param {Array}    opts.messages      [{ role: 'system'|'user'|'assistant', content }]
+ * @param {string}  [opts.model]        defaults to OLLAMA_MODEL / qwen3:1.7b
+ * @param {object|string} [opts.format] JSON schema or 'json' to force structured output
  * @param {number}  [opts.temperature]
- * @param {number}  [opts.numCtx]      context window; Ollama's default is small
- * @param {number}  [opts.timeoutMs]   local CPU models can be slow
+ * @param {number}  [opts.topP]
+ * @param {number}  [opts.repeatPenalty]
+ * @param {number}  [opts.numPredict]   max tokens to generate (bounds CPU latency)
+ * @param {number}  [opts.numCtx]       context window; Ollama's default is small
+ * @param {number}  [opts.timeoutMs]    local CPU models can be slow
  */
 /**
  * Post to Ollama's /api/chat endpoint, retrying without `think: false` if an
@@ -118,10 +125,21 @@ export async function ollamaChat({
   messages,
   model = getOllamaModel(),
   format,
-  temperature = 0.3,
+  temperature = 0.25,
+  topP = 0.85,
+  repeatPenalty = 1.1,
+  numPredict,
   numCtx = 4096,
   timeoutMs = 180000
 }) {
+  const options = {
+    temperature,
+    top_p: topP,
+    repeat_penalty: repeatPenalty,
+    num_ctx: numCtx,
+    ...(Number.isFinite(numPredict) && numPredict > 0 ? { num_predict: Math.round(numPredict) } : {})
+  };
+
   const data = await postChatPayload(
     getOllamaBaseUrl(),
     {
@@ -130,7 +148,7 @@ export async function ollamaChat({
       stream: false,
       keep_alive: '30m', // keep the model in RAM between messages (reloading is slow)
       ...(format && { format }),
-      options: { temperature, num_ctx: numCtx }
+      options
     },
     timeoutMs
   );
@@ -229,9 +247,9 @@ function isModelInstalled(installedModels, targetModel) {
  * Report whether Ollama is reachable and whether the configured model is pulled.
  * Never throws — used by the UI to show an "online / offline" badge.
  */
-export async function ollamaStatus() {
+export async function ollamaStatus(targetModel) {
   const baseUrl = getOllamaBaseUrl();
-  const model = getOllamaModel();
+  const model = targetModel || getOllamaModel();
   try {
     const res = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
     if (!res.ok) return { online: false, baseUrl, model, modelInstalled: false, models: [] };

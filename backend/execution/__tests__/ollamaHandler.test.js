@@ -75,3 +75,56 @@ describe('legacy gemini nodes', () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).model).toBe('qwen3:1.7b');
   });
 });
+
+describe('ollamaHandler precision & speed controls', () => {
+  it('injects strict RAG grounding prompt, temperature 0.2, num_predict, and 4096 num_ctx', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ model: 'qwen3:1.7b', message: { content: 'Not found in the provided context.' }, prompt_eval_count: 15, eval_count: 7 })
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const out = await ollamaHandler(
+      { id: 'ollama_1', data: { prompt: 'Question: X', responseFormat: 'rag_grounded', maxTokens: 512 } },
+      ctx()
+    );
+    expect(out.responseFormat).toBe('rag_grounded');
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.messages[0].role).toBe('system');
+    expect(body.messages[0].content).toMatch(/Not found in the provided context/);
+    expect(body.options).toMatchObject({ temperature: 0.2, num_predict: 512, num_ctx: 4096 });
+  });
+
+  it('passes format:"json" when responseFormat is json and uses compact 2048 num_ctx for short prompts', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ model: 'qwen3:1.7b', message: { content: '{"ok":true}' } })
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await ollamaHandler(
+      { id: 'ollama_1', data: { prompt: 'Extract ok=true', responseFormat: 'json' } },
+      ctx()
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.format).toBe('json');
+    expect(body.options.num_ctx).toBe(2048);
+  });
+
+  it('strips Markdown marks (**, #, backticks) into plain English for prose outputs', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'qwen3:1.7b',
+        message: { content: '### Summary\n\n- **Status:** `ok`\n* Fast *local* reply' }
+      })
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const out = await ollamaHandler(
+      { id: 'ollama_1', data: { prompt: 'Summarize', responseFormat: 'concise' } },
+      ctx()
+    );
+    expect(out.text).toBe('Summary\n\n- Status: ok\n- Fast local reply');
+  });
+});

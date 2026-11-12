@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Stand-in for the local Ollama server: each test sets what the "model" replies.
@@ -10,6 +13,7 @@ vi.mock('../utils/ollamaClient.js', async () => {
     ollamaWarmup: (...args) => ollamaWarmup(...args),
     ollamaStatus: async () => ({ online: true, model: 'qwen3:1.7b', modelInstalled: true, models: ['qwen3:1.7b'] }),
     getOllamaModel: () => 'qwen3:1.7b',
+    getOllamaCopilotModel: () => 'qwen3:1.7b',
     parseJsonResponse: actual.parseJsonResponse
   };
 });
@@ -17,6 +21,7 @@ vi.mock('../utils/ollamaClient.js', async () => {
 const {
   copilotChat,
   copilotWarmup,
+  saveCopilotExample,
   autoLayout,
   summarizeCanvas,
   checkEmailRecipients,
@@ -161,7 +166,7 @@ describe('copilotWarmup', () => {
     expect(res1.status).toHaveBeenCalledWith(202);
     expect(res2.status).toHaveBeenCalledWith(202);
     expect(ollamaWarmup).toHaveBeenCalledTimes(1);
-    expect(ollamaWarmup).toHaveBeenCalledWith(SYSTEM_PROMPT);
+    expect(ollamaWarmup).toHaveBeenCalledWith(SYSTEM_PROMPT, { model: 'qwen3:1.7b' });
     finish(true);
   });
 });
@@ -318,5 +323,75 @@ describe('small-model consistency guards', () => {
       ]
     });
     expect(rag.nodes.map((n) => n.id)).toEqual(['pdf_1', 'text_1', 'retrieve_1']);
+  });
+});
+
+describe('saveCopilotExample', () => {
+  const customFile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../training/custom_copilot_examples.jsonl');
+
+  it('validates and rejects cyclic workflows before saving training data', async () => {
+    const res = mockRes();
+    await saveCopilotExample(
+      {
+        body: {
+          messages: [{ role: 'user', content: 'Loop' }],
+          action: 'build',
+          reply: 'Built loop',
+          workflow: {
+            name: 'Bad',
+            nodes: [{ id: 'a_1', type: 'text', data: {} }, { id: 'b_1', type: 'ollama', data: {} }],
+            edges: [{ source: 'a_1', target: 'b_1' }, { source: 'b_1', target: 'a_1' }]
+          }
+        }
+      },
+      res
+    );
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.body.message).toMatch(/Circular dependency/i);
+  });
+
+  it('appends sanitized build examples to custom_copilot_examples.jsonl', async () => {
+    const hadFile = fs.existsSync(customFile);
+    const prev = hadFile ? fs.readFileSync(customFile, 'utf8') : null;
+    try {
+      const res = mockRes();
+      await saveCopilotExample(
+        {
+          body: {
+            messages: [{ role: 'user', content: 'Summarize text_1' }],
+            action: 'build',
+            reply: 'Built summarizer.',
+            workflow: {
+              name: 'Summarizer',
+              nodes: [
+                { id: 'text_1', type: 'text', data: { label: 'Input', text: 'hello' } },
+                { id: 'ollama_1', type: 'ollama', data: { label: 'Summarize', prompt: '{{text_1.text}}' } }
+              ],
+              edges: [{ source: 'text_1', target: 'ollama_1' }]
+            }
+          }
+        },
+        res
+      );
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.body.success).toBe(true);
+      const lines = fs.readFileSync(customFile, 'utf8').trim().split('\n');
+      const last = JSON.parse(lines[lines.length - 1]);
+      expect(last.messages[0].role).toBe('system');
+      expect(JSON.parse(last.messages[last.messages.length - 1].content).action).toBe('build');
+    } finally {
+      if (hadFile) fs.writeFileSync(customFile, prev, 'utf8');
+      else if (fs.existsSync(customFile)) fs.unlinkSync(customFile);
+    }
+  });
+
+  it('strips Markdown marks from copilotChat replies into plain English', async () => {
+    modelSays({
+      action: 'ask',
+      reply: '### Overview\nUse **api_1** with `{{api_1.data}}`.'
+    });
+    const res = mockRes();
+    await copilotChat(ask('How do I use api_1?'), res);
+    expect(res.body.reply).toBe('Overview\nUse api_1 with {{api_1.data}}.');
   });
 });

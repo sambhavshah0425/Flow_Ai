@@ -21,6 +21,9 @@ export const useCopilotStore = create((set, get) => ({
   isSending: false,
   isCheckingStatus: false,
   status: null, // { online, model, modelInstalled } from /copilot/status
+  savingMsgId: null,
+  savedMsgIds: {},
+  totalSavedExamples: null,
 
   open: async () => {
     set({ isOpen: true });
@@ -97,10 +100,13 @@ export const useCopilotStore = create((set, get) => ({
         useExecutionStore.getState().resetExecution(); // clear old run badges
         useWorkflowStore.getState().applyGeneratedWorkflow(workflow);
         set((s) => ({
-          messages: [...s.messages, msg('assistant', reply, { built: { name: workflow.name, nodeCount: workflow.nodes.length } })]
+          messages: [
+            ...s.messages,
+            msg('assistant', reply, { action: 'build', built: { name: workflow.name, nodeCount: workflow.nodes.length } })
+          ]
         }));
       } else {
-        set((s) => ({ messages: [...s.messages, msg('assistant', reply)] }));
+        set((s) => ({ messages: [...s.messages, msg('assistant', reply, { action: 'ask' })] }));
       }
     } catch (err) {
       if (epoch !== chatEpoch || err.name === 'CanceledError' || err.code === 'ERR_CANCELED') {
@@ -118,6 +124,44 @@ export const useCopilotStore = create((set, get) => ({
       if (epoch === chatEpoch) {
         set({ isSending: false });
       }
+    }
+  },
+
+  saveExampleForMessage: async (messageId) => {
+    const { messages, savingMsgId, savedMsgIds } = get();
+    if (savingMsgId || savedMsgIds[messageId]) return;
+
+    const idx = messages.findIndex((m) => m.id === messageId);
+    if (idx <= 0) return;
+
+    const target = messages[idx];
+    const prefix = messages
+      .slice(0, idx)
+      .filter((m) => !m.local && (m.role === 'user' || m.role === 'assistant'))
+      .slice(-12)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    if (prefix.length === 0 || prefix[prefix.length - 1].role !== 'user') return;
+
+    const action = target.built ? 'build' : target.action || 'ask';
+    const { workflowName, nodes, edges } = useWorkflowStore.getState();
+    const workflow = action === 'build' ? { name: workflowName, nodes, edges } : undefined;
+
+    set({ savingMsgId: messageId });
+    try {
+      const res = await api.post('/copilot/save-example', {
+        messages: prefix,
+        reply: target.content,
+        action,
+        workflow
+      });
+      set((s) => ({
+        savingMsgId: null,
+        savedMsgIds: { ...s.savedMsgIds, [messageId]: true },
+        totalSavedExamples: res.data.savedCount ?? s.totalSavedExamples
+      }));
+    } catch {
+      set({ savingMsgId: null });
     }
   }
 }));
